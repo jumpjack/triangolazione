@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Triangolazione GPS con Leaflet</title>
+    
+    <!-- Leaflet CSS -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100vh;
+            z-index: 1;
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+        }
+        
+        button {
+            display: block;
+            margin: 5px 0;
+            padding: 8px 12px;
+            width: 100%;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+        
+        button:hover {
+            background-color: #45a049;
+        }
+        
+        #disableGPS {
+            background-color: #f44336;
+        }
+        
+        #disableGPS:hover {
+            background-color: #d32f2f;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 12px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="controls">
+        <button id="submit">Aggiungi Triangolo</button>
+        <button id="disableGPS">DISABLE GPS</button>
+        <button id="enableGPS" style="display:none;">ENABLE GPS</button>
+        <div class="status" id="status">GPS attivo</div>
+    </div>
+
+    <!-- Leaflet JS -->
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    
+    <script>
+        // Variabili globali
+        let map;
+        let userMarker;
+        let userAccuracyCircle;
+        let watchId;
+        let gpsEnabled = true;
+        let triangles = [];
+        
+        // Inizializzazione della mappa
+        function initMap() {
+            // Crea la mappa centrata su Roma (posizione di default)
+            map = L.map('map').setView([41.9028, 12.4964], 15);
+            
+            // Aggiungi il layer di base OpenStreetMap
+            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
+            }).addTo(map);
+            
+            // Inizializza il marker dell'utente
+            userMarker = L.marker([0, 0], {
+                icon: L.divIcon({
+                    className: 'user-marker',
+                    html: '<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
+                    iconSize: [16, 16],
+                    iconAnchor: [8, 8]
+                })
+            }).addTo(map);
+            
+            // Inizializza il cerchio di accuratezza
+            userAccuracyCircle = L.circle([0, 0], {
+                radius: 0,
+                color: 'blue',
+                fillColor: '#3388ff',
+                fillOpacity: 0.2,
+                weight: 1
+            }).addTo(map);
+            
+            // Avvia il tracciamento GPS
+            startGPS();
+        }
+        
+        // Avvia il tracciamento GPS
+        function startGPS() {
+            if (navigator.geolocation) {
+                watchId = navigator.geolocation.watchPosition(
+                    updatePosition,
+                    handleGeolocationError,
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 10000,
+                        maximumAge: 0
+                    }
+                );
+                updateStatus("GPS attivo");
+                gpsEnabled = true;
+            } else {
+                alert("La geolocalizzazione non è supportata da questo browser.");
+            }
+        }
+        
+        // Ferma il tracciamento GPS
+        function stopGPS() {
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+            updateStatus("GPS disattivo");
+            gpsEnabled = false;
+        }
+        
+        // Aggiorna la posizione dell'utente sulla mappa
+        function updatePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            const accuracy = position.coords.accuracy;
+            
+            // Aggiorna la posizione del marker
+            userMarker.setLatLng([lat, lng]);
+            
+            // Aggiorna il cerchio di accuratezza
+            userAccuracyCircle.setLatLng([lat, lng]);
+            userAccuracyCircle.setRadius(accuracy);
+            
+            // Se il GPS è attivo, centra e ruota la mappa
+            if (gpsEnabled) {
+                map.setView([lat, lng], map.getZoom());
+                
+                // Ruota la mappa in base all'orientamento
+                if (position.coords.heading !== null) {
+                    map.setBearing(position.coords.heading);
+                }
+            }
+        }
+        
+        // Gestisce gli errori di geolocalizzazione
+        function handleGeolocationError(error) {
+            let message;
+            switch(error.code) {
+                case error.PERMISSION_DENIED:
+                    message = "Permesso di geolocalizzazione negato.";
+                    break;
+                case error.POSITION_UNAVAILABLE:
+                    message = "Informazioni sulla posizione non disponibili.";
+                    break;
+                case error.TIMEOUT:
+                    message = "Richiesta di geolocalizzazione scaduta.";
+                    break;
+                default:
+                    message = "Errore sconosciuto nella geolocalizzazione.";
+            }
+            updateStatus("Errore GPS: " + message);
+        }
+        
+        // Aggiunge un triangolo alla mappa
+        function addTriangle() {
+            const userLatLng = userMarker.getLatLng();
+            const mapBearing = map.getBearing ? map.getBearing() : 0;
+            
+            // Calcola i vertici del triangolo isoscele
+            const baseDistance = 1000; // 1 km
+            const baseWidth = 500; // 500 metri di larghezza alla base
+            
+            // Vertice dell'osservatore
+            const observerPoint = userLatLng;
+            
+            // Punto centrale della base (1 km di distanza nella direzione attuale)
+            const baseCenter = calculateDestinationPoint(observerPoint, mapBearing, baseDistance);
+            
+            // Punti estremi della base (perpendicolari alla direzione)
+            const baseLeft = calculateDestinationPoint(baseCenter, mapBearing - 90, baseWidth / 2);
+            const baseRight = calculateDestinationPoint(baseCenter, mapBearing + 90, baseWidth / 2);
+            
+            // Crea il poligono triangolare
+            const triangle = L.polygon([observerPoint, baseLeft, baseRight], {
+                color: 'blue',
+                fillColor: '#3388ff',
+                fillOpacity: 0.3,
+                weight: 2
+            }).addTo(map);
+            
+            // Aggiungi alla lista dei triangoli
+            triangles.push(triangle);
+        }
+        
+        // Calcola un punto di destinazione date coordinate, direzione e distanza
+        function calculateDestinationPoint(startPoint, bearing, distance) {
+            const R = 6371000; // Raggio della Terra in metri
+            const lat1 = startPoint.lat * Math.PI / 180;
+            const lon1 = startPoint.lng * Math.PI / 180;
+            const brng = bearing * Math.PI / 180;
+            
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) +
+                Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
+            
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1),
+                Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
+            
+            return L.latLng(lat2 * 180 / Math.PI, lon2 * 180 / Math.PI);
+        }
+        
+        // Aggiorna lo stato del GPS
+        function updateStatus(message) {
+            document.getElementById('status').textContent = message;
+        }
+        
+        // Inizializza tutto quando la pagina è caricata
+        document.addEventListener('DOMContentLoaded', function() {
+            initMap();
+            
+            // Gestione del pulsante Submit
+            document.getElementById('submit').addEventListener('click', function() {
+                addTriangle();
+            });
+            
+            // Gestione del pulsante Disable GPS
+            document.getElementById('disableGPS').addEventListener('click', function() {
+                stopGPS();
+                document.getElementById('disableGPS').style.display = 'none';
+                document.getElementById('enableGPS').style.display = 'block';
+            });
+            
+            // Gestione del pulsante Enable GPS
+            document.getElementById('enableGPS').addEventListener('click', function() {
+                startGPS();
+                document.getElementById('enableGPS').style.display = 'none';
+                document.getElementById('disableGPS').style.display = 'block';
+            });
+        });
+    </script>
+</body>
+</html>
