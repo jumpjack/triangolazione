@@ -85,6 +85,27 @@
             margin-top: 5px;
             font-size: 12px;
         }
+        
+        /* Stile per la mappa ruotata */
+        .leaflet-container {
+            transition: transform 0.5s ease;
+        }
+        
+        .compass {
+            position: absolute;
+            top: 80px;
+            right: 20px;
+            z-index: 1000;
+            background: white;
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 24px;
+        }
     </style>
 </head>
 <body>
@@ -106,11 +127,11 @@
             Rotazione: <span id="rotationValue">0°</span>
         </div>
     </div>
+    
+    <div class="compass" id="compass">N</div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Leaflet RotatedMarker plugin -->
-    <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedmarker@0.2.0/leaflet.rotatedMarker.min.js"></script>
     
     <script>
         // Variabili globali
@@ -121,13 +142,16 @@
         let gpsEnabled = true;
         let triangles = [];
         let currentRotation = 0;
+        let isRotating = false;
+        let rotationStartX = 0;
         
         // Inizializzazione della mappa
         function initMap() {
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
-                // Abilita il trascinamento della mappa
-                dragging: true
+                // Configurazioni per permettere la rotazione
+                inertia: false,
+                zoomControl: true
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -154,34 +178,111 @@
                 weight: 1
             }).addTo(map);
             
-            // Aggiungi un indicatore di direzione al centro della mappa
-            const directionMarker = L.marker(map.getCenter(), {
-                icon: L.divIcon({
-                    className: 'direction-marker',
-                    html: '<div style="background-color: transparent; width: 0; height: 0; border-left: 8px solid transparent; border-right: 8px solid transparent; border-bottom: 16px solid red; transform: rotate(0deg);"></div>',
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8]
-                })
-            }).addTo(map);
-            
-            // Aggiorna la rotazione quando la mappa viene spostata
-            map.on('move', function() {
-                updateDirectionMarker();
-            });
+            // Aggiungi gestori eventi per la rotazione manuale
+            setupManualRotation();
             
             // Avvia il tracciamento GPS
             startGPS();
         }
         
-        // Aggiorna l'indicatore di direzione
-        function updateDirectionMarker() {
-            const center = map.getCenter();
-            const directionMarkers = document.getElementsByClassName('direction-marker');
-            if (directionMarkers.length > 0) {
-                const markerDiv = directionMarkers[0];
-                const arrowDiv = markerDiv.querySelector('div');
-                arrowDiv.style.transform = `rotate(${currentRotation}deg)`;
+        // Configura la rotazione manuale della mappa
+        function setupManualRotation() {
+            const mapContainer = map.getContainer();
+            
+            // Mouse events per desktop
+            mapContainer.addEventListener('mousedown', startRotation);
+            document.addEventListener('mousemove', rotateMap);
+            document.addEventListener('mouseup', stopRotation);
+            
+            // Touch events per mobile
+            mapContainer.addEventListener('touchstart', startRotationTouch);
+            document.addEventListener('touchmove', rotateMapTouch);
+            document.addEventListener('touchend', stopRotation);
+            
+            // Previeni il comportamento di default per evitare conflitti
+            mapContainer.addEventListener('dragstart', (e) => e.preventDefault());
+        }
+        
+        // Inizia la rotazione (mouse)
+        function startRotation(e) {
+            if (!gpsEnabled && e.shiftKey) {
+                isRotating = true;
+                rotationStartX = e.clientX;
+                map.getContainer().style.cursor = 'grabbing';
+                e.preventDefault();
             }
+        }
+        
+        // Inizia la rotazione (touch)
+        function startRotationTouch(e) {
+            if (!gpsEnabled && e.touches.length === 2) {
+                isRotating = true;
+                rotationStartX = e.touches[0].clientX;
+                e.preventDefault();
+            }
+        }
+        
+        // Ruota la mappa (mouse)
+        function rotateMap(e) {
+            if (isRotating) {
+                const deltaX = e.clientX - rotationStartX;
+                const rotationDelta = deltaX * 0.5;
+                
+                currentRotation = (currentRotation + rotationDelta) % 360;
+                if (currentRotation < 0) currentRotation += 360;
+                
+                applyMapRotation();
+                rotationStartX = e.clientX;
+                e.preventDefault();
+            }
+        }
+        
+        // Ruota la mappa (touch)
+        function rotateMapTouch(e) {
+            if (isRotating && e.touches.length === 2) {
+                const deltaX = e.touches[0].clientX - rotationStartX;
+                const rotationDelta = deltaX * 0.5;
+                
+                currentRotation = (currentRotation + rotationDelta) % 360;
+                if (currentRotation < 0) currentRotation += 360;
+                
+                applyMapRotation();
+                rotationStartX = e.touches[0].clientX;
+                e.preventDefault();
+            }
+        }
+        
+        // Ferma la rotazione
+        function stopRotation() {
+            if (isRotating) {
+                isRotating = false;
+                map.getContainer().style.cursor = '';
+            }
+        }
+        
+        // Applica la rotazione alla mappa
+        function applyMapRotation() {
+            const mapContainer = map.getContainer();
+            mapContainer.style.transform = `rotate(${currentRotation}deg)`;
+            updateRotationValue();
+            updateCompass();
+        }
+        
+        // Aggiorna il valore di rotazione visualizzato
+        function updateRotationValue() {
+            document.getElementById('rotationValue').textContent = Math.round(currentRotation) + '°';
+        }
+        
+        // Aggiorna la bussola
+        function updateCompass() {
+            const compass = document.getElementById('compass');
+            const normalizedRotation = (360 - currentRotation) % 360;
+            compass.style.transform = `rotate(${normalizedRotation}deg)`;
+            
+            // Mostra la direzione cardinale
+            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
+            const index = Math.round(normalizedRotation / 45) % 8;
+            compass.textContent = directions[index];
         }
         
         // Avvia il tracciamento GPS
@@ -199,11 +300,8 @@
                 updateStatus("GPS attivo");
                 gpsEnabled = true;
                 
-                // Nascondi l'indicatore di direzione quando il GPS è attivo
-                const directionMarkers = document.getElementsByClassName('direction-marker');
-                if (directionMarkers.length > 0) {
-                    directionMarkers[0].style.display = 'none';
-                }
+                // Disabilita la rotazione manuale quando il GPS è attivo
+                map.getContainer().style.pointerEvents = 'auto';
             } else {
                 alert("La geolocalizzazione non è supportata da questo browser.");
             }
@@ -218,11 +316,8 @@
             updateStatus("GPS disattivo");
             gpsEnabled = false;
             
-            // Mostra l'indicatore di direzione quando il GPS è disattivo
-            const directionMarkers = document.getElementsByClassName('direction-marker');
-            if (directionMarkers.length > 0) {
-                directionMarkers[0].style.display = 'block';
-            }
+            // Abilita la rotazione manuale quando il GPS è disattivo
+            map.getContainer().style.pointerEvents = 'auto';
         }
         
         // Aggiorna la posizione dell'utente sulla mappa
@@ -245,8 +340,7 @@
                 // Ruota la mappa in base all'orientamento
                 if (position.coords.heading !== null) {
                     currentRotation = position.coords.heading;
-                    updateRotationValue();
-                    updateDirectionMarker();
+                    applyMapRotation();
                 }
             }
         }
@@ -325,23 +419,21 @@
             document.getElementById('status').textContent = message;
         }
         
-        // Aggiorna il valore di rotazione visualizzato
-        function updateRotationValue() {
-            document.getElementById('rotationValue').textContent = Math.round(currentRotation) + '°';
-        }
-        
-        // Ruota a sinistra
+        // Ruota a sinistra con i pulsanti
         function rotateLeft() {
-            currentRotation = (currentRotation - 15) % 360;
-            updateRotationValue();
-            updateDirectionMarker();
+            if (!gpsEnabled) {
+                currentRotation = (currentRotation - 15) % 360;
+                if (currentRotation < 0) currentRotation += 360;
+                applyMapRotation();
+            }
         }
         
-        // Ruota a destra
+        // Ruota a destra con i pulsanti
         function rotateRight() {
-            currentRotation = (currentRotation + 15) % 360;
-            updateRotationValue();
-            updateDirectionMarker();
+            if (!gpsEnabled) {
+                currentRotation = (currentRotation + 15) % 360;
+                applyMapRotation();
+            }
         }
         
         // Inizializza tutto quando la pagina è caricata
@@ -370,48 +462,6 @@
             // Gestione dei pulsanti di rotazione
             document.getElementById('rotateLeft').addEventListener('click', rotateLeft);
             document.getElementById('rotateRight').addEventListener('click', rotateRight);
-            
-            // Aggiungi controllo rotazione con mouse (trascina tenendo premuto Shift)
-            let isRotating = false;
-            let lastX;
-            
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Shift') {
-                    isRotating = true;
-                    map.getContainer().style.cursor = 'grab';
-                }
-            });
-            
-            document.addEventListener('keyup', function(e) {
-                if (e.key === 'Shift') {
-                    isRotating = false;
-                    map.getContainer().style.cursor = '';
-                }
-            });
-            
-            map.getContainer().addEventListener('mousedown', function(e) {
-                if (isRotating) {
-                    lastX = e.clientX;
-                    map.getContainer().style.cursor = 'grabbing';
-                }
-            });
-            
-            map.getContainer().addEventListener('mousemove', function(e) {
-                if (isRotating && lastX !== undefined) {
-                    const deltaX = e.clientX - lastX;
-                    currentRotation = (currentRotation + deltaX * 0.5) % 360;
-                    updateRotationValue();
-                    updateDirectionMarker();
-                    lastX = e.clientX;
-                }
-            });
-            
-            map.getContainer().addEventListener('mouseup', function() {
-                if (isRotating) {
-                    map.getContainer().style.cursor = 'grab';
-                    lastX = undefined;
-                }
-            });
         });
     </script>
 </body>
