@@ -13,6 +13,7 @@
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
+            overflow: hidden;
         }
         
         #map {
@@ -86,9 +87,46 @@
             font-size: 12px;
         }
         
-        /* Stile per la mappa ruotata */
-        .leaflet-container {
-            transition: transform 0.5s ease;
+        /* Indicatore centrale */
+        .center-marker {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1000;
+            pointer-events: none;
+        }
+        
+        .center-crosshair {
+            width: 30px;
+            height: 30px;
+            border: 3px solid red;
+            border-radius: 50%;
+            background: transparent;
+            position: relative;
+        }
+        
+        .center-crosshair::before,
+        .center-crosshair::after {
+            content: '';
+            position: absolute;
+            background: red;
+        }
+        
+        .center-crosshair::before {
+            width: 2px;
+            height: 40px;
+            top: -5px;
+            left: 50%;
+            transform: translateX(-50%);
+        }
+        
+        .center-crosshair::after {
+            width: 40px;
+            height: 2px;
+            top: 50%;
+            left: -5px;
+            transform: translateY(-50%);
         }
         
         .compass {
@@ -105,11 +143,31 @@
             align-items: center;
             justify-content: center;
             font-size: 24px;
+            font-weight: bold;
+        }
+        
+        /* Stile per la mappa ruotata */
+        .leaflet-container.rotated {
+            transform: rotate(var(--rotation)) !important;
+        }
+        
+        /* Disabilita lo zoom box quando si preme shift */
+        .leaflet-container.rotating {
+            cursor: grab !important;
+        }
+        
+        .leaflet-container.rotating:active {
+            cursor: grabbing !important;
         }
     </style>
 </head>
 <body>
     <div id="map"></div>
+    
+    <!-- Indicatore centrale sempre visibile -->
+    <div class="center-marker">
+        <div class="center-crosshair"></div>
+    </div>
     
     <div class="controls">
         <button id="submit">Aggiungi Triangolo</button>
@@ -144,14 +202,15 @@
         let currentRotation = 0;
         let isRotating = false;
         let rotationStartX = 0;
+        let shiftPressed = false;
         
         // Inizializzazione della mappa
         function initMap() {
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
-                // Configurazioni per permettere la rotazione
-                inertia: false,
-                zoomControl: true
+                zoomControl: true,
+                // Disabilita alcuni comportamenti di default per la rotazione
+                boxZoom: false
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -178,92 +237,123 @@
                 weight: 1
             }).addTo(map);
             
-            // Aggiungi gestori eventi per la rotazione manuale
-            setupManualRotation();
+            // Configura gli eventi per la rotazione
+            setupRotationEvents();
+            
+            // Applica la rotazione iniziale
+            applyMapRotation();
             
             // Avvia il tracciamento GPS
             startGPS();
         }
         
-        // Configura la rotazione manuale della mappa
-        function setupManualRotation() {
+        // Configura gli eventi per la rotazione
+        function setupRotationEvents() {
             const mapContainer = map.getContainer();
             
-            // Mouse events per desktop
-            mapContainer.addEventListener('mousedown', startRotation);
-            document.addEventListener('mousemove', rotateMap);
-            document.addEventListener('mouseup', stopRotation);
+            // Eventi per il tasto Shift
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Shift' && !gpsEnabled) {
+                    shiftPressed = true;
+                    mapContainer.classList.add('rotating');
+                    mapContainer.style.cursor = 'grab';
+                    e.preventDefault();
+                }
+            });
             
-            // Touch events per mobile
-            mapContainer.addEventListener('touchstart', startRotationTouch);
-            document.addEventListener('touchmove', rotateMapTouch);
-            document.addEventListener('touchend', stopRotation);
+            document.addEventListener('keyup', function(e) {
+                if (e.key === 'Shift') {
+                    shiftPressed = false;
+                    isRotating = false;
+                    mapContainer.classList.remove('rotating');
+                    mapContainer.style.cursor = '';
+                }
+            });
             
-            // Previeni il comportamento di default per evitare conflitti
-            mapContainer.addEventListener('dragstart', (e) => e.preventDefault());
-        }
-        
-        // Inizia la rotazione (mouse)
-        function startRotation(e) {
-            if (!gpsEnabled && e.shiftKey) {
-                isRotating = true;
-                rotationStartX = e.clientX;
-                map.getContainer().style.cursor = 'grabbing';
-                e.preventDefault();
-            }
-        }
-        
-        // Inizia la rotazione (touch)
-        function startRotationTouch(e) {
-            if (!gpsEnabled && e.touches.length === 2) {
-                isRotating = true;
-                rotationStartX = e.touches[0].clientX;
-                e.preventDefault();
-            }
-        }
-        
-        // Ruota la mappa (mouse)
-        function rotateMap(e) {
-            if (isRotating) {
-                const deltaX = e.clientX - rotationStartX;
-                const rotationDelta = deltaX * 0.5;
-                
-                currentRotation = (currentRotation + rotationDelta) % 360;
-                if (currentRotation < 0) currentRotation += 360;
-                
-                applyMapRotation();
-                rotationStartX = e.clientX;
-                e.preventDefault();
-            }
-        }
-        
-        // Ruota la mappa (touch)
-        function rotateMapTouch(e) {
-            if (isRotating && e.touches.length === 2) {
-                const deltaX = e.touches[0].clientX - rotationStartX;
-                const rotationDelta = deltaX * 0.5;
-                
-                currentRotation = (currentRotation + rotationDelta) % 360;
-                if (currentRotation < 0) currentRotation += 360;
-                
-                applyMapRotation();
-                rotationStartX = e.touches[0].clientX;
-                e.preventDefault();
-            }
-        }
-        
-        // Ferma la rotazione
-        function stopRotation() {
-            if (isRotating) {
-                isRotating = false;
-                map.getContainer().style.cursor = '';
-            }
+            // Mouse events per la rotazione
+            mapContainer.addEventListener('mousedown', function(e) {
+                if (shiftPressed && !gpsEnabled) {
+                    isRotating = true;
+                    rotationStartX = e.clientX;
+                    mapContainer.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (isRotating && shiftPressed && !gpsEnabled) {
+                    const deltaX = e.clientX - rotationStartX;
+                    const rotationDelta = deltaX * 0.5;
+                    
+                    currentRotation = (currentRotation + rotationDelta) % 360;
+                    if (currentRotation < 0) currentRotation += 360;
+                    
+                    applyMapRotation();
+                    rotationStartX = e.clientX;
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+            
+            document.addEventListener('mouseup', function() {
+                if (isRotating) {
+                    isRotating = false;
+                    if (shiftPressed) {
+                        mapContainer.style.cursor = 'grab';
+                    }
+                }
+            });
+            
+            // Touch events per mobile (rotazione con due dita)
+            let touchStartDistance = 0;
+            let touchStartAngle = 0;
+            
+            mapContainer.addEventListener('touchstart', function(e) {
+                if (!gpsEnabled && e.touches.length === 2) {
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    
+                    touchStartDistance = Math.hypot(
+                        touch2.clientX - touch1.clientX,
+                        touch2.clientY - touch1.clientY
+                    );
+                    touchStartAngle = Math.atan2(
+                        touch2.clientY - touch1.clientY,
+                        touch2.clientX - touch1.clientX
+                    ) * 180 / Math.PI;
+                    
+                    e.preventDefault();
+                }
+            });
+            
+            mapContainer.addEventListener('touchmove', function(e) {
+                if (!gpsEnabled && e.touches.length === 2) {
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    
+                    const currentAngle = Math.atan2(
+                        touch2.clientY - touch1.clientY,
+                        touch2.clientX - touch1.clientX
+                    ) * 180 / Math.PI;
+                    
+                    const angleDelta = currentAngle - touchStartAngle;
+                    currentRotation = (currentRotation + angleDelta) % 360;
+                    if (currentRotation < 0) currentRotation += 360;
+                    
+                    applyMapRotation();
+                    touchStartAngle = currentAngle;
+                    
+                    e.preventDefault();
+                }
+            });
         }
         
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             const mapContainer = map.getContainer();
-            mapContainer.style.transform = `rotate(${currentRotation}deg)`;
+            mapContainer.style.setProperty('--rotation', currentRotation + 'deg');
+            mapContainer.classList.add('rotated');
             updateRotationValue();
             updateCompass();
         }
@@ -301,7 +391,10 @@
                 gpsEnabled = true;
                 
                 // Disabilita la rotazione manuale quando il GPS è attivo
-                map.getContainer().style.pointerEvents = 'auto';
+                const mapContainer = map.getContainer();
+                mapContainer.classList.remove('rotating');
+                shiftPressed = false;
+                isRotating = false;
             } else {
                 alert("La geolocalizzazione non è supportata da questo browser.");
             }
@@ -315,9 +408,6 @@
             }
             updateStatus("GPS disattivo");
             gpsEnabled = false;
-            
-            // Abilita la rotazione manuale quando il GPS è disattivo
-            map.getContainer().style.pointerEvents = 'auto';
         }
         
         // Aggiorna la posizione dell'utente sulla mappa
