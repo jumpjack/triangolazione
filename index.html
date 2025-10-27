@@ -34,7 +34,7 @@
             gap: 10px;
         }
         
-        #submitBtn {
+        .btn {
             background: #2563eb;
             color: white;
             border: none;
@@ -47,13 +47,47 @@
             transition: all 0.3s ease;
         }
         
-        #submitBtn:hover {
+        .btn:hover {
             background: #1d4ed8;
             transform: scale(1.05);
         }
         
-        #submitBtn:active {
+        .btn:active {
             transform: scale(0.95);
+        }
+        
+        #debugBtn {
+            background: #6b7280;
+            padding: 12px 24px;
+            font-size: 14px;
+        }
+        
+        #debugBtn.active {
+            background: #f59e0b;
+        }
+        
+        .debug-controls {
+            display: none;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            margin-bottom: 10px;
+        }
+        
+        .debug-controls.active {
+            display: block;
+        }
+        
+        .debug-controls input[type="range"] {
+            width: 200px;
+            margin: 0 10px;
+        }
+        
+        .debug-controls label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
         }
         
         .info-panel {
@@ -89,11 +123,27 @@
     <div class="error" id="error"></div>
     
     <div class="controls">
+        <div class="debug-controls" id="debugControls">
+            <label>
+                Latitudine: <input type="number" id="debugLat" step="0.0001" value="41.9028">
+            </label>
+            <label>
+                Longitudine: <input type="number" id="debugLng" step="0.0001" value="12.4964">
+            </label>
+            <label>
+                Direzione: <input type="range" id="debugHeading" min="0" max="360" value="0">
+                <span id="debugHeadingValue">0</span>°
+            </label>
+            <button class="btn" id="applyDebug" style="padding: 8px 16px; font-size: 14px;">Applica</button>
+        </div>
+        
         <div class="info-panel">
             <div>Direzione: <strong id="heading">--</strong>°</div>
             <div>Linee tracciate: <strong id="lineCount">0</strong></div>
         </div>
-        <button id="submitBtn">Traccia Linea</button>
+        
+        <button class="btn" id="debugBtn">DEBUG</button>
+        <button class="btn" id="submitBtn">Traccia Linea</button>
     </div>
 
     <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
