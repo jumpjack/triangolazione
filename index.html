@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mappa con Triangoli - GPS + Manuale</title>
+  <title>Mappa Ruotabile con Triangoli</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html, body {
@@ -33,19 +33,10 @@
       font-size: 14px;
       cursor: pointer;
     }
-    label {
-      display: block;
+    #instructions {
+      font-size: 12px;
+      color: #555;
       margin-top: 8px;
-      font-weight: bold;
-    }
-    input[type="range"] {
-      width: 100%;
-      margin-top: 4px;
-    }
-    #heading-display {
-      font-size: 14px;
-      color: #333;
-      margin-top: 4px;
     }
   </style>
 </head>
@@ -55,33 +46,43 @@
     <button id="btn-submit">Disegna Triangolo</button>
     <button id="btn-enable-gps">ENABLE GPS</button>
     <button id="btn-disable-gps">DISABLE GPS</button>
-
-    <label for="heading-input">Orientamento (°): <span id="heading-display">0°</span></label>
-    <input type="range" id="heading-input" min="0" max="360" value="0" step="1" />
+    <div id="instructions">
+      🖱️ <b>PC:</b> Tieni premuto <code>Alt</code> e trascina per ruotare.<br>
+      📱 <b>Mobile:</b> Usa il GPS per rotazione automatica.
+    </div>
   </div>
 
+  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <!-- Plugin per rotazione mappa -->
+  <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedview@0.2.0/src/leaflet.rotatedView.js"></script>
+
   <script>
     let map;
     let gpsEnabled = false;
-    let currentPosition = null; // solo se GPS attivo
+    let currentPosition = null;
     let currentHeading = 0;
     let watchId = null;
     let userMarker = null;
 
-    // Inizializza mappa
+    // Inizializza mappa con supporto rotazione
     function initMap() {
       map = L.map('map', {
         zoomControl: true,
-        dragging: true
-      }).setView([41.9, 12.5], 14); // Roma come default
+        dragging: true,
+        rotated: true, // <-- abilita rotazione!
+        rotateControl: {
+          position: 'topright',
+          style: { backgroundColor: 'white', padding: '4px' }
+        }
+      }).setView([41.9, 12.5], 15); // Roma
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
     }
 
-    // Calcola punto a distanza e bearing
+    // Calcola punto a distanza e bearing (rispetto al Nord geografico)
     function destinationPoint(start, distance, bearing) {
       const R = 6378137;
       const lat1 = (start.lat * Math.PI) / 180;
@@ -103,10 +104,18 @@
       );
     }
 
-    // Disegna triangolo
-    function drawTriangle(origin, heading) {
+    // Disegna triangolo: parte dal centro mappa, va verso "alto schermo" = 0° mappa ruotata
+    function drawTriangle() {
+      const origin = map.getCenter();
+
+      // Nella mappa ruotata, "0°" = direzione verso l'alto dello schermo
+      // Quindi il triangolo va sempre dritto verso l'alto (indipendentemente dal Nord)
+      // Per farlo, usiamo bearing = rotazione attuale della mappa
+      const mapRotation = map.getBearing(); // in gradi, orario, 0 = Nord in alto
+      const heading = (360 - mapRotation) % 360; // direzione geografica corrispondente all'"alto schermo"
+
       const distance = 1000; // 1 km
-      const baseHalfWidth = 200; // metri
+      const baseHalfWidth = 200;
 
       const endPoint = destinationPoint(origin, distance, heading);
       const left = destinationPoint(endPoint, baseHalfWidth, heading + 90);
@@ -124,24 +133,35 @@
       }).addTo(map);
     }
 
-    // Aggiorna marker utente (solo se GPS attivo)
-    function updateUserMarker(latlng, heading) {
-      if (userMarker) {
-        userMarker.setLatLng(latlng);
-      } else {
-        userMarker = L.circleMarker(latlng, {
-          radius: 8,
-          color: 'red',
-          fillColor: '#f00',
-          fillOpacity: 1
-        }).addTo(map);
+    // Aggiorna posizione e rotazione se GPS attivo
+    function updateUserPosition(lat, lng, heading) {
+      currentPosition = L.latLng(lat, lng);
+      currentHeading = heading;
+
+      if (gpsEnabled) {
+        map.setView(currentPosition, map.getZoom());
+
+        // Ruota la mappa in modo che la direzione dell'utente punti VERSO L'ALTO
+        // Se heading = 90° (Est), la mappa deve ruotare di -90°, così l'Est va in alto
+        const rotation = -heading;
+        map.setBearing(rotation);
+
+        // Aggiorna marker
+        if (userMarker) userMarker.setLatLng(currentPosition);
+        else {
+          userMarker = L.circleMarker(currentPosition, {
+            radius: 8,
+            color: 'red',
+            fillColor: '#f00',
+            fillOpacity: 1
+          }).addTo(map);
+        }
       }
     }
 
-    // Abilita GPS
+    // GPS
     function enableGPS() {
-      if (watchId !== null) return;
-
+      if (watchId) return;
       if (!navigator.geolocation) {
         alert("Geolocalizzazione non supportata.");
         return;
@@ -152,87 +172,54 @@
           const lat = pos.coords.latitude;
           const lng = pos.coords.longitude;
           let heading = pos.coords.heading;
-
-          if (heading === null) heading = currentHeading; // fallback
-          else currentHeading = heading;
-
-          currentPosition = L.latLng(lat, lng);
-          currentHeading = heading;
-
-          if (gpsEnabled) {
-            map.setView(currentPosition, map.getZoom());
-            updateUserMarker(currentPosition, heading);
-            document.getElementById('heading-input').value = Math.round(heading);
-            document.getElementById('heading-display').textContent = Math.round(heading) + '°';
-          }
+          if (heading === null) heading = currentHeading || 0;
+          updateUserPosition(lat, lng, heading);
         },
         (err) => {
-          console.error("Errore GPS:", err);
-          alert("Impossibile accedere alla posizione.");
+          console.error(err);
+          alert("Errore GPS: " + err.message);
         },
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
       );
 
-      // Prova a usare deviceorientation per heading più preciso
-      const handleOrientation = (e) => {
+      // DeviceOrientation per heading migliore (mobile)
+      const onOrientation = (e) => {
         if (e.alpha !== null && gpsEnabled) {
           currentHeading = e.alpha;
-          document.getElementById('heading-input').value = Math.round(e.alpha);
-          document.getElementById('heading-display').textContent = Math.round(e.alpha) + '°';
+          if (currentPosition) updateUserPosition(currentPosition.lat, currentPosition.lng, e.alpha);
         }
       };
 
       if (typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission().then(state => {
-          if (state === 'granted') window.addEventListener('deviceorientation', handleOrientation);
+          if (state === 'granted') window.addEventListener('deviceorientation', onOrientation);
         });
       } else {
-        window.addEventListener('deviceorientation', handleOrientation);
+        window.addEventListener('deviceorientation', onOrientation);
       }
 
       gpsEnabled = true;
     }
 
     function disableGPS() {
-      if (watchId !== null) {
+      if (watchId) {
         navigator.geolocation.clearWatch(watchId);
         watchId = null;
       }
       window.removeEventListener('deviceorientation', () => {});
-      if (userMarker) map.removeLayer(userMarker);
-      userMarker = null;
+      if (userMarker) {
+        map.removeLayer(userMarker);
+        userMarker = null;
+      }
       gpsEnabled = false;
       currentPosition = null;
     }
 
-    // MAIN: Disegna triangolo al click
-    document.getElementById('btn-submit').addEventListener('click', () => {
-      let origin, heading;
-
-      if (gpsEnabled && currentPosition) {
-        origin = currentPosition;
-        heading = currentHeading;
-      } else {
-        // Usa il centro della mappa e l'input manuale
-        origin = map.getCenter();
-        heading = parseFloat(document.getElementById('heading-input').value);
-      }
-
-      drawTriangle(origin, heading);
-    });
-
-    // Aggiorna display heading quando si muove lo slider
-    const headingInput = document.getElementById('heading-input');
-    const headingDisplay = document.getElementById('heading-display');
-    headingInput.addEventListener('input', () => {
-      headingDisplay.textContent = headingInput.value + '°';
-      currentHeading = parseFloat(headingInput.value);
-    });
-
+    // Eventi
+    document.getElementById('btn-submit').addEventListener('click', drawTriangle);
     document.getElementById('btn-enable-gps').addEventListener('click', enableGPS);
     document.getElementById('btn-disable-gps').addEventListener('click', disableGPS);
 
-    // Avvia
     window.addEventListener('load', initMap);
   </script>
 </body>
