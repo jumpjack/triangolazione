@@ -181,6 +181,14 @@
             border-top: 1px solid #eee;
             padding-top: 10px;
         }
+        
+        .help-text {
+            font-size: 11px;
+            color: #666;
+            text-align: center;
+            margin-top: 5px;
+            font-style: italic;
+        }
     </style>
 </head>
 <body>
@@ -214,6 +222,7 @@
             <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSlider">
         </div>
         
+        <div class="help-text">CTRL + Trascina per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
     </div>
     
@@ -232,10 +241,8 @@
         let triangles = [];
         let currentRotation = 0;
         let isRotating = false;
-        let isDragging = false;
         let rotationStartX = 0;
-        let dragStartPoint = null;
-        let shiftPressed = false;
+        let controlPressed = false;
         
         // Variabili per i slider
         let baseWidth = 500; // metri (larghezza base)
@@ -249,10 +256,8 @@
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
                 zoomControl: true,
-                // Riabilita il drag di Leaflet ma gestiamo noi la rotazione
-                dragging: true,
-                // Disabilita zoom con doppio click e scroll
-                doubleClickZoom: false
+                // Usa il drag normale di Leaflet
+                dragging: true
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -296,40 +301,38 @@
         function setupRotationEvents() {
             const mapContainer = map.getContainer();
             
-            // Eventi per il tasto Shift
+            // Eventi per il tasto Control
             document.addEventListener('keydown', function(e) {
-                if (e.key === 'Shift' && !gpsEnabled) {
-                    shiftPressed = true;
+                if (e.key === 'Control' && !gpsEnabled) {
+                    controlPressed = true;
                     mapContainer.style.cursor = 'grab';
-                    // Disabilita temporaneamente il drag di Leaflet durante la rotazione
-                    map.dragging.disable();
                     e.preventDefault();
                 }
             });
             
             document.addEventListener('keyup', function(e) {
-                if (e.key === 'Shift') {
-                    shiftPressed = false;
+                if (e.key === 'Control') {
+                    controlPressed = false;
                     isRotating = false;
                     mapContainer.style.cursor = '';
-                    // Riabilita il drag di Leaflet
-                    map.dragging.enable();
                 }
             });
             
-            // Mouse events solo per la rotazione
+            // Mouse events per la rotazione
             mapContainer.addEventListener('mousedown', function(e) {
-                if (shiftPressed && !gpsEnabled && e.button === 0) { // Solo tasto sinistro
+                if (controlPressed && !gpsEnabled && e.button === 0) {
                     isRotating = true;
                     rotationStartX = e.clientX;
                     mapContainer.style.cursor = 'grabbing';
+                    // Disabilita temporaneamente il drag di Leaflet durante la rotazione
+                    map.dragging.disable();
                     e.preventDefault();
                     e.stopPropagation();
                 }
             });
             
-            mapContainer.addEventListener('mousemove', function(e) {
-                if (isRotating && shiftPressed && !gpsEnabled) {
+            document.addEventListener('mousemove', function(e) {
+                if (isRotating && controlPressed && !gpsEnabled) {
                     const deltaX = e.clientX - rotationStartX;
                     const rotationDelta = deltaX * 0.5;
                     
@@ -343,10 +346,12 @@
                 }
             });
             
-            mapContainer.addEventListener('mouseup', function(e) {
+            document.addEventListener('mouseup', function(e) {
                 if (isRotating && e.button === 0) {
                     isRotating = false;
-                    if (shiftPressed) {
+                    // Riabilita il drag di Leaflet
+                    map.dragging.enable();
+                    if (controlPressed) {
                         mapContainer.style.cursor = 'grab';
                     }
                     e.preventDefault();
@@ -356,7 +361,7 @@
             
             // Previeni il comportamento di default del contest menu
             mapContainer.addEventListener('contextmenu', function(e) {
-                if (shiftPressed) {
+                if (controlPressed) {
                     e.preventDefault();
                 }
             });
