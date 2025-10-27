@@ -253,6 +253,9 @@
         let baseWidth = 500; // metri (larghezza base)
         let baseDistance = 1000; // metri (altezza/distanza)
         
+        // Struttura per memorizzare i triangoli con le loro informazioni
+        let triangleData = [];
+        
         // Inizializzazione della mappa
         function initMap() {
             // Crea la mappa centrata su Roma (posizione di default)
@@ -314,12 +317,39 @@
             baseWidthSlider.addEventListener('input', function() {
                 baseWidth = parseInt(this.value);
                 baseWidthValue.textContent = baseWidth + ' m';
+                updateAllTriangles();
+            });
+            
+            baseWidthSlider.addEventListener('change', function() {
+                updateAllTriangles();
             });
             
             // Eventi per lo slider dell'altezza
             baseDistanceSlider.addEventListener('input', function() {
                 baseDistance = parseInt(this.value);
                 baseDistanceValue.textContent = baseDistance + ' m';
+                updateAllTriangles();
+            });
+            
+            baseDistanceSlider.addEventListener('change', function() {
+                updateAllTriangles();
+            });
+        }
+        
+        // Aggiorna tutti i triangoli esistenti
+        function updateAllTriangles() {
+            // Rimuovi tutti i triangoli dalla mappa
+            triangles.forEach(triangle => {
+                map.removeLayer(triangle);
+            });
+            
+            // Ricrea tutti i triangoli con le nuove dimensioni
+            const oldTriangleData = [...triangleData];
+            triangles = [];
+            triangleData = [];
+            
+            oldTriangleData.forEach(data => {
+                createTriangle(data.observerPoint, data.originalRotation);
             });
         }
         
@@ -525,24 +555,15 @@
             updateStatus("Errore GPS: " + message);
         }
         
-        // Aggiunge un triangolo alla mappa
-        function addTriangle() {
-            let observerPoint;
-            
-            // Se il GPS è attivo, usa la posizione GPS, altrimenti usa il centro della mappa
-            if (gpsEnabled) {
-                observerPoint = userMarker.getLatLng();
-            } else {
-                observerPoint = map.getCenter();
-            }
-            
+        // Crea un triangolo
+        function createTriangle(observerPoint, originalRotation) {
             // Calcola i vertici del triangolo isoscele usando i valori degli slider
             // baseDistance = altezza del triangolo (distanza dalla base)
             // baseWidth = larghezza della base
             
             // IMPORTANTE: Il triangolo va SEMPRE VERSO L'ALTO della pagina
             // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
-            const directionTowardsTop = (360 - currentRotation) % 360;
+            const directionTowardsTop = (360 - originalRotation) % 360;
             
             // Vertice dell'osservatore (esattamente al centro)
             const baseCenter = calculateDestinationPoint(observerPoint, directionTowardsTop, baseDistance);
@@ -561,6 +582,28 @@
             
             // Aggiungi alla lista dei triangoli
             triangles.push(triangle);
+            
+            // Salva i dati del triangolo per poterlo ricreare
+            triangleData.push({
+                observerPoint: observerPoint,
+                originalRotation: originalRotation
+            });
+            
+            return triangle;
+        }
+        
+        // Aggiunge un triangolo alla mappa
+        function addTriangle() {
+            let observerPoint;
+            
+            // Se il GPS è attivo, usa la posizione GPS, altrimenti usa il centro della mappa
+            if (gpsEnabled) {
+                observerPoint = userMarker.getLatLng();
+            } else {
+                observerPoint = map.getCenter();
+            }
+            
+            createTriangle(observerPoint, currentRotation);
         }
         
         // Calcola un punto di destinazione date coordinate, direzione e distanza
