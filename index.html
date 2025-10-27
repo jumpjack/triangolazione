@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Mappa Ruotabile con Triangoli</title>
+  <title>Mappa con Direzione e Triangoli</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
     html, body {
@@ -33,10 +33,9 @@
       font-size: 14px;
       cursor: pointer;
     }
-    #instructions {
-      font-size: 12px;
-      color: #555;
+    #direction-display {
       margin-top: 8px;
+      font-weight: bold;
     }
   </style>
 </head>
@@ -46,43 +45,122 @@
     <button id="btn-submit">Disegna Triangolo</button>
     <button id="btn-enable-gps">ENABLE GPS</button>
     <button id="btn-disable-gps">DISABLE GPS</button>
-    <div id="instructions">
-      🖱️ <b>PC:</b> Tieni premuto <code>Alt</code> e trascina per ruotare.<br>
-      📱 <b>Mobile:</b> Usa il GPS per rotazione automatica.
-    </div>
+    <div id="direction-display">Direzione: 0°</div>
   </div>
 
-  <!-- Leaflet -->
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-  <!-- Plugin per rotazione mappa -->
-  <script src="https://cdn.jsdelivr.net/npm/leaflet-rotatedview@0.2.0/src/leaflet.rotatedView.js"></script>
-
   <script>
     let map;
     let gpsEnabled = false;
-    let currentPosition = null;
-    let currentHeading = 0;
+    let currentHeading = 0; // in gradi, 0 = Nord
     let watchId = null;
     let userMarker = null;
+    let directionIndicator = null; // L.divIcon personalizzato
 
-    // Inizializza mappa con supporto rotazione
+    // Inizializza mappa
     function initMap() {
       map = L.map('map', {
         zoomControl: true,
-        dragging: true,
-        rotated: true, // <-- abilita rotazione!
-        rotateControl: {
-          position: 'topright',
-          style: { backgroundColor: 'white', padding: '4px' }
-        }
-      }).setView([41.9, 12.5], 15); // Roma
+        dragging: true
+      }).setView([41.9, 12.5], 15);
 
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         attribution: '&copy; OpenStreetMap contributors'
       }).addTo(map);
+
+      createDirectionIndicator();
     }
 
-    // Calcola punto a distanza e bearing (rispetto al Nord geografico)
+    function createDirectionIndicator() {
+      const el = document.createElement('div');
+      el.innerHTML = `
+        <svg width="40" height="40" viewBox="-20 -20 40 40" style="pointer-events: none;">
+          <circle r="16" fill="none" stroke="#333" stroke-width="1"/>
+          <line x1="0" y1="0" x2="0" y2="-14" stroke="red" stroke-width="3" marker-end="url(#arrowhead)"/>
+          <defs>
+            <marker id="arrowhead" markerWidth="6" markerHeight="6" refX="0" refY="3" orient="auto">
+              <path d="M0,0 L0,6 L9,3 z" fill="red" />
+            </marker>
+          </defs>
+        </svg>
+      `;
+      el.style.cursor = 'grab';
+
+      directionIndicator = L.marker(map.getCenter(), {
+        icon: L.divIcon({
+          className: 'direction-indicator',
+          html: el.innerHTML,
+          iconSize: [40, 40],
+          iconAnchor: [20, 20]
+        }),
+        interactive: true,
+        draggable: false
+      }).addTo(map);
+
+      // Rendi la freccia ruotabile con il mouse (solo se GPS disattivato)
+      el.addEventListener('mousedown', startRotate);
+      directionIndicator.getElement().addEventListener('mousedown', (e) => {
+        if (!gpsEnabled) startRotate(e);
+      });
+
+      // Aggiorna posizione al movimento della mappa
+      map.on('move', () => {
+        if (directionIndicator) directionIndicator.setLatLng(map.getCenter());
+      });
+    }
+
+    let isRotating = false;
+    function startRotate(e) {
+      if (gpsEnabled) return;
+      isRotating = true;
+      const startX = e.clientX || e.touches?.[0].clientX;
+      const startY = e.clientY || e.touches?.[0].clientY;
+      const center = map.latLngToContainerPoint(map.getCenter());
+      const dx = startX - center.x;
+      const dy = startY - center.y;
+      let startAngle = Math.atan2(-dy, dx) * 180 / Math.PI;
+      if (startAngle < 0) startAngle += 360;
+
+      const onMouseMove = (moveEvent) => {
+        if (!isRotating) return;
+        const mx = moveEvent.clientX || moveEvent.touches?.[0].clientX;
+        const my = moveEvent.clientY || moveEvent.touches?.[0].clientY;
+        const mdx = mx - center.x;
+        const mdy = my - center.y;
+        let angle = Math.atan2(-mdy, mdx) * 180 / Math.PI;
+        if (angle < 0) angle += 360;
+
+        currentHeading = angle;
+        updateDirectionIndicator();
+        document.getElementById('direction-display').textContent = `Direzione: ${Math.round(angle)}°`;
+      };
+
+      const onMouseUp = () => {
+        isRotating = false;
+        document.removeEventListener('mousemove', onMouseMove);
+        document.removeEventListener('mouseup', onMouseUp);
+        document.removeEventListener('touchmove', onMouseMove);
+        document.removeEventListener('touchend', onMouseUp);
+      };
+
+      document.addEventListener('mousemove', onMouseMove);
+      document.addEventListener('mouseup', onMouseUp);
+      document.addEventListener('touchmove', onMouseMove, { passive: false });
+      document.addEventListener('touchend', onMouseUp);
+    }
+
+    function updateDirectionIndicator() {
+      const el = directionIndicator.getElement();
+      if (el) {
+        const svg = el.querySelector('svg');
+        if (svg) {
+          svg.style.transform = `rotate(${currentHeading}deg)`;
+          svg.style.transformOrigin = 'center';
+        }
+      }
+    }
+
+    // Calcolo punto a distanza
     function destinationPoint(start, distance, bearing) {
       const R = 6378137;
       const lat1 = (start.lat * Math.PI) / 180;
@@ -104,22 +182,16 @@
       );
     }
 
-    // Disegna triangolo: parte dal centro mappa, va verso "alto schermo" = 0° mappa ruotata
     function drawTriangle() {
       const origin = map.getCenter();
+      const heading = currentHeading;
 
-      // Nella mappa ruotata, "0°" = direzione verso l'alto dello schermo
-      // Quindi il triangolo va sempre dritto verso l'alto (indipendentemente dal Nord)
-      // Per farlo, usiamo bearing = rotazione attuale della mappa
-      const mapRotation = map.getBearing(); // in gradi, orario, 0 = Nord in alto
-      const heading = (360 - mapRotation) % 360; // direzione geografica corrispondente all'"alto schermo"
+      const distance = 1000;
+      const halfWidth = 200;
 
-      const distance = 1000; // 1 km
-      const baseHalfWidth = 200;
-
-      const endPoint = destinationPoint(origin, distance, heading);
-      const left = destinationPoint(endPoint, baseHalfWidth, heading + 90);
-      const right = destinationPoint(endPoint, baseHalfWidth, heading - 90);
+      const tip = destinationPoint(origin, distance, heading);
+      const left = destinationPoint(tip, halfWidth, heading + 90);
+      const right = destinationPoint(tip, halfWidth, heading - 90);
 
       L.polygon([
         [origin.lat, origin.lng],
@@ -133,60 +205,46 @@
       }).addTo(map);
     }
 
-    // Aggiorna posizione e rotazione se GPS attivo
     function updateUserPosition(lat, lng, heading) {
-      currentPosition = L.latLng(lat, lng);
       currentHeading = heading;
+      updateDirectionIndicator();
+      document.getElementById('direction-display').textContent = `Direzione: ${Math.round(heading)}°`;
 
       if (gpsEnabled) {
-        map.setView(currentPosition, map.getZoom());
-
-        // Ruota la mappa in modo che la direzione dell'utente punti VERSO L'ALTO
-        // Se heading = 90° (Est), la mappa deve ruotare di -90°, così l'Est va in alto
-        const rotation = -heading;
-        map.setBearing(rotation);
-
-        // Aggiorna marker
-        if (userMarker) userMarker.setLatLng(currentPosition);
+        map.setView([lat, lng], map.getZoom());
+        if (userMarker) userMarker.setLatLng([lat, lng]);
         else {
-          userMarker = L.circleMarker(currentPosition, {
-            radius: 8,
-            color: 'red',
-            fillColor: '#f00',
+          userMarker = L.circleMarker([lat, lng], {
+            radius: 6,
+            color: 'green',
+            fillColor: '#0f0',
             fillOpacity: 1
           }).addTo(map);
         }
       }
     }
 
-    // GPS
     function enableGPS() {
       if (watchId) return;
       if (!navigator.geolocation) {
-        alert("Geolocalizzazione non supportata.");
+        alert("GPS non supportato.");
         return;
       }
 
       watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          let heading = pos.coords.heading;
-          if (heading === null) heading = currentHeading || 0;
-          updateUserPosition(lat, lng, heading);
+          const h = pos.coords.heading;
+          const heading = (h === null) ? currentHeading : h;
+          updateUserPosition(pos.coords.latitude, pos.coords.longitude, heading);
         },
-        (err) => {
-          console.error(err);
-          alert("Errore GPS: " + err.message);
-        },
+        (err) => console.error(err),
         { enableHighAccuracy: true, maximumAge: 5000, timeout: 10000 }
       );
 
-      // DeviceOrientation per heading migliore (mobile)
+      // DeviceOrientation per heading migliore
       const onOrientation = (e) => {
         if (e.alpha !== null && gpsEnabled) {
-          currentHeading = e.alpha;
-          if (currentPosition) updateUserPosition(currentPosition.lat, currentPosition.lng, e.alpha);
+          updateUserPosition(userMarker?.getLatLng()?.lat || 0, userMarker?.getLatLng()?.lng || 0, e.alpha);
         }
       };
 
@@ -207,12 +265,9 @@
         watchId = null;
       }
       window.removeEventListener('deviceorientation', () => {});
-      if (userMarker) {
-        map.removeLayer(userMarker);
-        userMarker = null;
-      }
+      if (userMarker) map.removeLayer(userMarker);
+      userMarker = null;
       gpsEnabled = false;
-      currentPosition = null;
     }
 
     // Eventi
