@@ -28,14 +28,15 @@
             right: 10px;
             z-index: 1000;
             background: white;
-            padding: 10px;
+            padding: 15px;
             border-radius: 5px;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            width: 250px;
         }
         
         button {
             display: block;
-            margin: 5px 0;
+            margin: 10px 0;
             padding: 8px 12px;
             width: 100%;
             background-color: #4CAF50;
@@ -135,6 +136,65 @@
         .leaflet-container.rotating:active {
             cursor: grabbing !important;
         }
+        
+        /* Stili per gli slider */
+        .slider-container {
+            margin: 15px 0;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            font-size: 12px;
+            color: #333;
+        }
+        
+        .slider-name {
+            font-weight: bold;
+        }
+        
+        .slider-value {
+            color: #666;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #ddd;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+        }
+        
+        .slider::-moz-range-thumb {
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: #4CAF50;
+            cursor: pointer;
+            border: none;
+        }
+        
+        .sliders-title {
+            margin-top: 15px;
+            margin-bottom: 10px;
+            font-size: 14px;
+            font-weight: bold;
+            color: #333;
+            text-align: center;
+            border-top: 1px solid #eee;
+            padding-top: 10px;
+        }
     </style>
 </head>
 <body>
@@ -149,6 +209,25 @@
         <button id="submit">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
+        
+        <div class="sliders-title">Regola Triangolo</div>
+        
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Larghezza Base</span>
+                <span class="slider-value" id="baseWidthValue">500 m</span>
+            </div>
+            <input type="range" min="100" max="2000" value="500" class="slider" id="baseWidthSlider">
+        </div>
+        
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Altezza</span>
+                <span class="slider-value" id="baseDistanceValue">1000 m</span>
+            </div>
+            <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSlider">
+        </div>
+        
         <div class="status" id="status">GPS attivo</div>
     </div>
     
@@ -169,6 +248,10 @@
         let isRotating = false;
         let rotationStartX = 0;
         let shiftPressed = false;
+        
+        // Variabili per i slider
+        let baseWidth = 500; // metri (larghezza base)
+        let baseDistance = 1000; // metri (altezza/distanza)
         
         // Inizializzazione della mappa
         function initMap() {
@@ -206,11 +289,38 @@
             // Configura gli eventi per la rotazione
             setupRotationEvents();
             
+            // Configura gli slider
+            setupSliders();
+            
             // Applica la rotazione iniziale
             applyMapRotation();
             
             // Avvia il tracciamento GPS
             startGPS();
+        }
+        
+        // Configura gli slider
+        function setupSliders() {
+            const baseWidthSlider = document.getElementById('baseWidthSlider');
+            const baseDistanceSlider = document.getElementById('baseDistanceSlider');
+            const baseWidthValue = document.getElementById('baseWidthValue');
+            const baseDistanceValue = document.getElementById('baseDistanceValue');
+            
+            // Aggiorna i valori iniziali
+            baseWidthValue.textContent = baseWidth + ' m';
+            baseDistanceValue.textContent = baseDistance + ' m';
+            
+            // Eventi per lo slider della larghezza
+            baseWidthSlider.addEventListener('input', function() {
+                baseWidth = parseInt(this.value);
+                baseWidthValue.textContent = baseWidth + ' m';
+            });
+            
+            // Eventi per lo slider dell'altezza
+            baseDistanceSlider.addEventListener('input', function() {
+                baseDistance = parseInt(this.value);
+                baseDistanceValue.textContent = baseDistance + ' m';
+            });
         }
         
         // Configura gli eventi per la rotazione
@@ -426,9 +536,9 @@
                 observerPoint = map.getCenter();
             }
             
-            // Calcola i vertici del triangolo isoscele
-            const baseDistance = 1000; // 1 km
-            const baseWidth = 500; // 500 metri di larghezza alla base
+            // Calcola i vertici del triangolo isoscele usando i valori degli slider
+            // baseDistance = altezza del triangolo (distanza dalla base)
+            // baseWidth = larghezza della base
             
             // IMPORTANTE: Il triangolo va SEMPRE VERSO L'ALTO della pagina
             // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
