@@ -430,15 +430,16 @@
             const baseDistance = 1000; // 1 km
             const baseWidth = 500; // 500 metri di larghezza alla base
             
-            // Il triangolo va SEMPRE VERSO L'ALTO (direzione 0°)
-            const fixedDirection = 0;
+            // IMPORTANTE: Il triangolo va SEMPRE VERSO L'ALTO della pagina
+            // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
+            const directionTowardsTop = (360 - currentRotation) % 360;
             
             // Vertice dell'osservatore (esattamente al centro)
-            const baseCenter = calculateDestinationPoint(observerPoint, fixedDirection, baseDistance);
+            const baseCenter = calculateDestinationPoint(observerPoint, directionTowardsTop, baseDistance);
             
             // Punti estremi della base (perpendicolari alla direzione)
-            const baseLeft = calculateDestinationPoint(baseCenter, fixedDirection - 90, baseWidth / 2);
-            const baseRight = calculateDestinationPoint(baseCenter, fixedDirection + 90, baseWidth / 2);
+            const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
+            const baseRight = calculateDestinationPoint(baseCenter, directionTowardsTop + 90, baseWidth / 2);
             
             // Crea il poligono triangolare
             const triangle = L.polygon([observerPoint, baseLeft, baseRight], {
