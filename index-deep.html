@@ -123,20 +123,6 @@
             font-weight: bold;
         }
         
-        /* Stile per la mappa ruotata */
-        .leaflet-container.rotated {
-            transform: rotate(var(--rotation)) !important;
-        }
-        
-        /* Disabilita lo zoom box quando si preme shift */
-        .leaflet-container.rotating {
-            cursor: grab !important;
-        }
-        
-        .leaflet-container.rotating:active {
-            cursor: grabbing !important;
-        }
-        
         /* Stili per gli slider */
         .slider-container {
             margin: 15px 0;
@@ -246,7 +232,9 @@
         let triangles = [];
         let currentRotation = 0;
         let isRotating = false;
+        let isDragging = false;
         let rotationStartX = 0;
+        let dragStartPoint = null;
         let shiftPressed = false;
         
         // Variabili per i slider
@@ -261,8 +249,8 @@
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
                 zoomControl: true,
-                // Disabilita alcuni comportamenti di default per la rotazione
-                boxZoom: false
+                // Disabilita il drag di Leaflet per gestirlo manualmente
+                dragging: false
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -289,8 +277,8 @@
                 weight: 1
             }).addTo(map);
             
-            // Configura gli eventi per la rotazione
-            setupRotationEvents();
+            // Configura gli eventi per la rotazione e il trascinamento
+            setupMapEvents();
             
             // Configura gli slider
             setupSliders();
@@ -300,6 +288,187 @@
             
             // Avvia il tracciamento GPS
             startGPS();
+        }
+        
+        // Configura gli eventi della mappa
+        function setupMapEvents() {
+            const mapContainer = map.getContainer();
+            
+            // Eventi per il tasto Shift (rotazione)
+            document.addEventListener('keydown', function(e) {
+                if (e.key === 'Shift' && !gpsEnabled) {
+                    shiftPressed = true;
+                    mapContainer.style.cursor = 'grab';
+                    e.preventDefault();
+                }
+            });
+            
+            document.addEventListener('keyup', function(e) {
+                if (e.key === 'Shift') {
+                    shiftPressed = false;
+                    isRotating = false;
+                    mapContainer.style.cursor = '';
+                }
+            });
+            
+            // Mouse events per rotazione e trascinamento
+            mapContainer.addEventListener('mousedown', function(e) {
+                if (shiftPressed && !gpsEnabled) {
+                    // Modalità rotazione
+                    isRotating = true;
+                    rotationStartX = e.clientX;
+                    mapContainer.style.cursor = 'grabbing';
+                } else if (!gpsEnabled) {
+                    // Modalità trascinamento
+                    isDragging = true;
+                    dragStartPoint = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        center: map.getCenter(),
+                        zoom: map.getZoom()
+                    };
+                    mapContainer.style.cursor = 'grabbing';
+                }
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (isRotating && shiftPressed && !gpsEnabled) {
+                    // Rotazione della mappa
+                    const deltaX = e.clientX - rotationStartX;
+                    const rotationDelta = deltaX * 0.5;
+                    
+                    currentRotation = (currentRotation + rotationDelta) % 360;
+                    if (currentRotation < 0) currentRotation += 360;
+                    
+                    applyMapRotation();
+                    rotationStartX = e.clientX;
+                } else if (isDragging && !gpsEnabled) {
+                    // Trascinamento della mappa - CORRETTO per gestire la rotazione
+                    const deltaX = e.clientX - dragStartPoint.x;
+                    const deltaY = e.clientY - dragStartPoint.y;
+                    
+                    // Calcola lo spostamento nel sistema di coordinate della mappa ruotata
+                    const cos = Math.cos(-currentRotation * Math.PI / 180);
+                    const sin = Math.sin(-currentRotation * Math.PI / 180);
+                    
+                    // Ruota il vettore di spostamento per compensare la rotazione della mappa
+                    const rotatedDeltaX = deltaX * cos - deltaY * sin;
+                    const rotatedDeltaY = deltaX * sin + deltaY * cos;
+                    
+                    // Calcola il nuovo centro
+                    const pixelBounds = map.getPixelBounds();
+                    const pixelCenter = map.getSize().divideBy(2);
+                    
+                    const worldCenter = map.project(dragStartPoint.center, dragStartPoint.zoom);
+                    const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
+                    const newCenter = map.unproject(newWorldCenter, dragStartPoint.zoom);
+                    
+                    map.setView(newCenter, dragStartPoint.zoom, { animate: false });
+                }
+                e.preventDefault();
+                e.stopPropagation();
+            });
+            
+            document.addEventListener('mouseup', function() {
+                if (isRotating) {
+                    isRotating = false;
+                    if (shiftPressed) {
+                        mapContainer.style.cursor = 'grab';
+                    }
+                }
+                if (isDragging) {
+                    isDragging = false;
+                    dragStartPoint = null;
+                    mapContainer.style.cursor = '';
+                }
+            });
+            
+            // Touch events per mobile
+            let touchStartDistance = 0;
+            let touchStartAngle = 0;
+            let isTouchRotating = false;
+            let isTouchDragging = false;
+            let touchStartPoint = null;
+            
+            mapContainer.addEventListener('touchstart', function(e) {
+                if (!gpsEnabled) {
+                    if (e.touches.length === 2) {
+                        // Rotazione con due dita
+                        isTouchRotating = true;
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        
+                        touchStartDistance = Math.hypot(
+                            touch2.clientX - touch1.clientX,
+                            touch2.clientY - touch1.clientY
+                        );
+                        touchStartAngle = Math.atan2(
+                            touch2.clientY - touch1.clientY,
+                            touch2.clientX - touch1.clientX
+                        ) * 180 / Math.PI;
+                    } else if (e.touches.length === 1) {
+                        // Trascinamento con un dito
+                        isTouchDragging = true;
+                        const touch = e.touches[0];
+                        touchStartPoint = {
+                            x: touch.clientX,
+                            y: touch.clientY,
+                            center: map.getCenter(),
+                            zoom: map.getZoom()
+                        };
+                    }
+                    e.preventDefault();
+                }
+            });
+            
+            mapContainer.addEventListener('touchmove', function(e) {
+                if (!gpsEnabled) {
+                    if (isTouchRotating && e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        
+                        const currentAngle = Math.atan2(
+                            touch2.clientY - touch1.clientY,
+                            touch2.clientX - touch1.clientX
+                        ) * 180 / Math.PI;
+                        
+                        const angleDelta = currentAngle - touchStartAngle;
+                        currentRotation = (currentRotation + angleDelta) % 360;
+                        if (currentRotation < 0) currentRotation += 360;
+                        
+                        applyMapRotation();
+                        touchStartAngle = currentAngle;
+                    } else if (isTouchDragging && e.touches.length === 1) {
+                        const touch = e.touches[0];
+                        const deltaX = touch.clientX - touchStartPoint.x;
+                        const deltaY = touch.clientY - touchStartPoint.y;
+                        
+                        // Calcola lo spostamento nel sistema di coordinate della mappa ruotata
+                        const cos = Math.cos(-currentRotation * Math.PI / 180);
+                        const sin = Math.sin(-currentRotation * Math.PI / 180);
+                        
+                        // Ruota il vettore di spostamento per compensare la rotazione della mappa
+                        const rotatedDeltaX = deltaX * cos - deltaY * sin;
+                        const rotatedDeltaY = deltaX * sin + deltaY * cos;
+                        
+                        // Calcola il nuovo centro
+                        const worldCenter = map.project(touchStartPoint.center, touchStartPoint.zoom);
+                        const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
+                        const newCenter = map.unproject(newWorldCenter, touchStartPoint.zoom);
+                        
+                        map.setView(newCenter, touchStartPoint.zoom, { animate: false });
+                    }
+                    e.preventDefault();
+                }
+            });
+            
+            mapContainer.addEventListener('touchend', function() {
+                isTouchRotating = false;
+                isTouchDragging = false;
+                touchStartPoint = null;
+            });
         }
         
         // Configura gli slider
@@ -353,113 +522,10 @@
             });
         }
         
-        // Configura gli eventi per la rotazione
-        function setupRotationEvents() {
-            const mapContainer = map.getContainer();
-            
-            // Eventi per il tasto Shift
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Shift' && !gpsEnabled) {
-                    shiftPressed = true;
-                    mapContainer.classList.add('rotating');
-                    mapContainer.style.cursor = 'grab';
-                    e.preventDefault();
-                }
-            });
-            
-            document.addEventListener('keyup', function(e) {
-                if (e.key === 'Shift') {
-                    shiftPressed = false;
-                    isRotating = false;
-                    mapContainer.classList.remove('rotating');
-                    mapContainer.style.cursor = '';
-                }
-            });
-            
-            // Mouse events per la rotazione
-            mapContainer.addEventListener('mousedown', function(e) {
-                if (shiftPressed && !gpsEnabled) {
-                    isRotating = true;
-                    rotationStartX = e.clientX;
-                    mapContainer.style.cursor = 'grabbing';
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mousemove', function(e) {
-                if (isRotating && shiftPressed && !gpsEnabled) {
-                    const deltaX = e.clientX - rotationStartX;
-                    const rotationDelta = deltaX * 0.5;
-                    
-                    currentRotation = (currentRotation + rotationDelta) % 360;
-                    if (currentRotation < 0) currentRotation += 360;
-                    
-                    applyMapRotation();
-                    rotationStartX = e.clientX;
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mouseup', function() {
-                if (isRotating) {
-                    isRotating = false;
-                    if (shiftPressed) {
-                        mapContainer.style.cursor = 'grab';
-                    }
-                }
-            });
-            
-            // Touch events per mobile (rotazione con due dita)
-            let touchStartDistance = 0;
-            let touchStartAngle = 0;
-            
-            mapContainer.addEventListener('touchstart', function(e) {
-                if (!gpsEnabled && e.touches.length === 2) {
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-                    
-                    touchStartDistance = Math.hypot(
-                        touch2.clientX - touch1.clientX,
-                        touch2.clientY - touch1.clientY
-                    );
-                    touchStartAngle = Math.atan2(
-                        touch2.clientY - touch1.clientY,
-                        touch2.clientX - touch1.clientX
-                    ) * 180 / Math.PI;
-                    
-                    e.preventDefault();
-                }
-            });
-            
-            mapContainer.addEventListener('touchmove', function(e) {
-                if (!gpsEnabled && e.touches.length === 2) {
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-                    
-                    const currentAngle = Math.atan2(
-                        touch2.clientY - touch1.clientY,
-                        touch2.clientX - touch1.clientX
-                    ) * 180 / Math.PI;
-                    
-                    const angleDelta = currentAngle - touchStartAngle;
-                    currentRotation = (currentRotation + angleDelta) % 360;
-                    if (currentRotation < 0) currentRotation += 360;
-                    
-                    applyMapRotation();
-                    touchStartAngle = currentAngle;
-                    
-                    e.preventDefault();
-                }
-            });
-        }
-        
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             const mapContainer = map.getContainer();
-            mapContainer.style.setProperty('--rotation', currentRotation + 'deg');
-            mapContainer.classList.add('rotated');
+            mapContainer.style.transform = `rotate(${currentRotation}deg)`;
             updateCompass();
         }
         
@@ -490,12 +556,6 @@
                 );
                 updateStatus("GPS attivo");
                 gpsEnabled = true;
-                
-                // Disabilita la rotazione manuale quando il GPS è attivo
-                const mapContainer = map.getContainer();
-                mapContainer.classList.remove('rotating');
-                shiftPressed = false;
-                isRotating = false;
             } else {
                 alert("La geolocalizzazione non è supportata da questo browser.");
             }
