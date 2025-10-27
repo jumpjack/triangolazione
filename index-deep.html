@@ -63,30 +63,6 @@
             text-align: center;
         }
         
-        .rotation-controls {
-            position: absolute;
-            bottom: 20px;
-            left: 20px;
-            z-index: 1000;
-            background: white;
-            padding: 10px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-        }
-        
-        .rotation-controls button {
-            width: 40px;
-            height: 40px;
-            font-size: 18px;
-            margin: 5px;
-        }
-        
-        .rotation-info {
-            text-align: center;
-            margin-top: 5px;
-            font-size: 12px;
-        }
-        
         /* Indicatore centrale */
         .center-marker {
             position: absolute;
@@ -174,16 +150,6 @@
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
         <div class="status" id="status">GPS attivo</div>
-    </div>
-    
-    <div class="rotation-controls">
-        <div>
-            <button id="rotateLeft">↶</button>
-            <button id="rotateRight">↷</button>
-        </div>
-        <div class="rotation-info">
-            Rotazione: <span id="rotationValue">0°</span>
-        </div>
     </div>
     
     <div class="compass" id="compass">N</div>
@@ -354,20 +320,15 @@
             const mapContainer = map.getContainer();
             mapContainer.style.setProperty('--rotation', currentRotation + 'deg');
             mapContainer.classList.add('rotated');
-            updateRotationValue();
             updateCompass();
         }
         
-        // Aggiorna il valore di rotazione visualizzato
-        function updateRotationValue() {
-            document.getElementById('rotationValue').textContent = Math.round(currentRotation) + '°';
-        }
-        
-        // Aggiorna la bussola
+        // Aggiorna la bussola (solo testo, senza rotazione)
         function updateCompass() {
             const compass = document.getElementById('compass');
+            
+            // Calcola la direzione cardinale in base alla rotazione
             const normalizedRotation = (360 - currentRotation) % 360;
-            compass.style.transform = `rotate(${normalizedRotation}deg)`;
             
             // Mostra la direzione cardinale
             const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
@@ -469,12 +430,15 @@
             const baseDistance = 1000; // 1 km
             const baseWidth = 500; // 500 metri di larghezza alla base
             
-            // Vertice dell'osservatore
-            const baseCenter = calculateDestinationPoint(observerPoint, currentRotation, baseDistance);
+            // Il triangolo va SEMPRE VERSO L'ALTO (direzione 0°)
+            const fixedDirection = 0;
+            
+            // Vertice dell'osservatore (esattamente al centro)
+            const baseCenter = calculateDestinationPoint(observerPoint, fixedDirection, baseDistance);
             
             // Punti estremi della base (perpendicolari alla direzione)
-            const baseLeft = calculateDestinationPoint(baseCenter, currentRotation - 90, baseWidth / 2);
-            const baseRight = calculateDestinationPoint(baseCenter, currentRotation + 90, baseWidth / 2);
+            const baseLeft = calculateDestinationPoint(baseCenter, fixedDirection - 90, baseWidth / 2);
+            const baseRight = calculateDestinationPoint(baseCenter, fixedDirection + 90, baseWidth / 2);
             
             // Crea il poligono triangolare
             const triangle = L.polygon([observerPoint, baseLeft, baseRight], {
@@ -509,23 +473,6 @@
             document.getElementById('status').textContent = message;
         }
         
-        // Ruota a sinistra con i pulsanti
-        function rotateLeft() {
-            if (!gpsEnabled) {
-                currentRotation = (currentRotation - 15) % 360;
-                if (currentRotation < 0) currentRotation += 360;
-                applyMapRotation();
-            }
-        }
-        
-        // Ruota a destra con i pulsanti
-        function rotateRight() {
-            if (!gpsEnabled) {
-                currentRotation = (currentRotation + 15) % 360;
-                applyMapRotation();
-            }
-        }
-        
         // Inizializza tutto quando la pagina è caricata
         document.addEventListener('DOMContentLoaded', function() {
             initMap();
@@ -548,10 +495,6 @@
                 document.getElementById('enableGPS').style.display = 'none';
                 document.getElementById('disableGPS').style.display = 'block';
             });
-            
-            // Gestione dei pulsanti di rotazione
-            document.getElementById('rotateLeft').addEventListener('click', rotateLeft);
-            document.getElementById('rotateRight').addEventListener('click', rotateRight);
         });
     </script>
 </body>
