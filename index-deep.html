@@ -249,8 +249,10 @@
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
                 zoomControl: true,
-                // Disabilita il drag di Leaflet per gestirlo manualmente
-                dragging: false
+                // Riabilita il drag di Leaflet ma gestiamo noi la rotazione
+                dragging: true,
+                // Disabilita zoom con doppio click e scroll
+                doubleClickZoom: false
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -277,8 +279,8 @@
                 weight: 1
             }).addTo(map);
             
-            // Configura gli eventi per la rotazione e il trascinamento
-            setupMapEvents();
+            // Configura gli eventi per la rotazione
+            setupRotationEvents();
             
             // Configura gli slider
             setupSliders();
@@ -290,15 +292,17 @@
             startGPS();
         }
         
-        // Configura gli eventi della mappa
-        function setupMapEvents() {
+        // Configura gli eventi per la rotazione
+        function setupRotationEvents() {
             const mapContainer = map.getContainer();
             
-            // Eventi per il tasto Shift (rotazione)
+            // Eventi per il tasto Shift
             document.addEventListener('keydown', function(e) {
                 if (e.key === 'Shift' && !gpsEnabled) {
                     shiftPressed = true;
                     mapContainer.style.cursor = 'grab';
+                    // Disabilita temporaneamente il drag di Leaflet durante la rotazione
+                    map.dragging.disable();
                     e.preventDefault();
                 }
             });
@@ -308,34 +312,24 @@
                     shiftPressed = false;
                     isRotating = false;
                     mapContainer.style.cursor = '';
+                    // Riabilita il drag di Leaflet
+                    map.dragging.enable();
                 }
             });
             
-            // Mouse events per rotazione e trascinamento
+            // Mouse events solo per la rotazione
             mapContainer.addEventListener('mousedown', function(e) {
-                if (shiftPressed && !gpsEnabled) {
-                    // Modalità rotazione
+                if (shiftPressed && !gpsEnabled && e.button === 0) { // Solo tasto sinistro
                     isRotating = true;
                     rotationStartX = e.clientX;
                     mapContainer.style.cursor = 'grabbing';
-                } else if (!gpsEnabled) {
-                    // Modalità trascinamento
-                    isDragging = true;
-                    dragStartPoint = {
-                        x: e.clientX,
-                        y: e.clientY,
-                        center: map.getCenter(),
-                        zoom: map.getZoom()
-                    };
-                    mapContainer.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
-                e.preventDefault();
-                e.stopPropagation();
             });
             
-            document.addEventListener('mousemove', function(e) {
+            mapContainer.addEventListener('mousemove', function(e) {
                 if (isRotating && shiftPressed && !gpsEnabled) {
-                    // Rotazione della mappa
                     const deltaX = e.clientX - rotationStartX;
                     const rotationDelta = deltaX * 0.5;
                     
@@ -344,130 +338,82 @@
                     
                     applyMapRotation();
                     rotationStartX = e.clientX;
-                } else if (isDragging && !gpsEnabled) {
-                    // Trascinamento della mappa - CORRETTO per gestire la rotazione
-                    const deltaX = e.clientX - dragStartPoint.x;
-                    const deltaY = e.clientY - dragStartPoint.y;
-                    
-                    // Calcola lo spostamento nel sistema di coordinate della mappa ruotata
-                    const cos = Math.cos(-currentRotation * Math.PI / 180);
-                    const sin = Math.sin(-currentRotation * Math.PI / 180);
-                    
-                    // Ruota il vettore di spostamento per compensare la rotazione della mappa
-                    const rotatedDeltaX = deltaX * cos - deltaY * sin;
-                    const rotatedDeltaY = deltaX * sin + deltaY * cos;
-                    
-                    // Calcola il nuovo centro
-                    const pixelBounds = map.getPixelBounds();
-                    const pixelCenter = map.getSize().divideBy(2);
-                    
-                    const worldCenter = map.project(dragStartPoint.center, dragStartPoint.zoom);
-                    const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
-                    const newCenter = map.unproject(newWorldCenter, dragStartPoint.zoom);
-                    
-                    map.setView(newCenter, dragStartPoint.zoom, { animate: false });
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
-                e.preventDefault();
-                e.stopPropagation();
             });
             
-            document.addEventListener('mouseup', function() {
-                if (isRotating) {
+            mapContainer.addEventListener('mouseup', function(e) {
+                if (isRotating && e.button === 0) {
                     isRotating = false;
                     if (shiftPressed) {
                         mapContainer.style.cursor = 'grab';
                     }
-                }
-                if (isDragging) {
-                    isDragging = false;
-                    dragStartPoint = null;
-                    mapContainer.style.cursor = '';
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
             });
             
-            // Touch events per mobile
+            // Previeni il comportamento di default del contest menu
+            mapContainer.addEventListener('contextmenu', function(e) {
+                if (shiftPressed) {
+                    e.preventDefault();
+                }
+            });
+            
+            // Touch events per mobile (rotazione con due dita)
             let touchStartDistance = 0;
             let touchStartAngle = 0;
             let isTouchRotating = false;
-            let isTouchDragging = false;
-            let touchStartPoint = null;
             
             mapContainer.addEventListener('touchstart', function(e) {
-                if (!gpsEnabled) {
-                    if (e.touches.length === 2) {
-                        // Rotazione con due dita
-                        isTouchRotating = true;
-                        const touch1 = e.touches[0];
-                        const touch2 = e.touches[1];
-                        
-                        touchStartDistance = Math.hypot(
-                            touch2.clientX - touch1.clientX,
-                            touch2.clientY - touch1.clientY
-                        );
-                        touchStartAngle = Math.atan2(
-                            touch2.clientY - touch1.clientY,
-                            touch2.clientX - touch1.clientX
-                        ) * 180 / Math.PI;
-                    } else if (e.touches.length === 1) {
-                        // Trascinamento con un dito
-                        isTouchDragging = true;
-                        const touch = e.touches[0];
-                        touchStartPoint = {
-                            x: touch.clientX,
-                            y: touch.clientY,
-                            center: map.getCenter(),
-                            zoom: map.getZoom()
-                        };
-                    }
+                if (!gpsEnabled && e.touches.length === 2) {
+                    isTouchRotating = true;
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    
+                    touchStartDistance = Math.hypot(
+                        touch2.clientX - touch1.clientX,
+                        touch2.clientY - touch1.clientY
+                    );
+                    touchStartAngle = Math.atan2(
+                        touch2.clientY - touch1.clientY,
+                        touch2.clientX - touch1.clientX
+                    ) * 180 / Math.PI;
+                    
+                    // Disabilita il drag durante la rotazione touch
+                    map.dragging.disable();
                     e.preventDefault();
                 }
             });
             
             mapContainer.addEventListener('touchmove', function(e) {
-                if (!gpsEnabled) {
-                    if (isTouchRotating && e.touches.length === 2) {
-                        const touch1 = e.touches[0];
-                        const touch2 = e.touches[1];
-                        
-                        const currentAngle = Math.atan2(
-                            touch2.clientY - touch1.clientY,
-                            touch2.clientX - touch1.clientX
-                        ) * 180 / Math.PI;
-                        
-                        const angleDelta = currentAngle - touchStartAngle;
-                        currentRotation = (currentRotation + angleDelta) % 360;
-                        if (currentRotation < 0) currentRotation += 360;
-                        
-                        applyMapRotation();
-                        touchStartAngle = currentAngle;
-                    } else if (isTouchDragging && e.touches.length === 1) {
-                        const touch = e.touches[0];
-                        const deltaX = touch.clientX - touchStartPoint.x;
-                        const deltaY = touch.clientY - touchStartPoint.y;
-                        
-                        // Calcola lo spostamento nel sistema di coordinate della mappa ruotata
-                        const cos = Math.cos(-currentRotation * Math.PI / 180);
-                        const sin = Math.sin(-currentRotation * Math.PI / 180);
-                        
-                        // Ruota il vettore di spostamento per compensare la rotazione della mappa
-                        const rotatedDeltaX = deltaX * cos - deltaY * sin;
-                        const rotatedDeltaY = deltaX * sin + deltaY * cos;
-                        
-                        // Calcola il nuovo centro
-                        const worldCenter = map.project(touchStartPoint.center, touchStartPoint.zoom);
-                        const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
-                        const newCenter = map.unproject(newWorldCenter, touchStartPoint.zoom);
-                        
-                        map.setView(newCenter, touchStartPoint.zoom, { animate: false });
-                    }
+                if (!gpsEnabled && isTouchRotating && e.touches.length === 2) {
+                    const touch1 = e.touches[0];
+                    const touch2 = e.touches[1];
+                    
+                    const currentAngle = Math.atan2(
+                        touch2.clientY - touch1.clientY,
+                        touch2.clientX - touch1.clientX
+                    ) * 180 / Math.PI;
+                    
+                    const angleDelta = currentAngle - touchStartAngle;
+                    currentRotation = (currentRotation + angleDelta) % 360;
+                    if (currentRotation < 0) currentRotation += 360;
+                    
+                    applyMapRotation();
+                    touchStartAngle = currentAngle;
+                    
                     e.preventDefault();
                 }
             });
             
             mapContainer.addEventListener('touchend', function() {
-                isTouchRotating = false;
-                isTouchDragging = false;
-                touchStartPoint = null;
+                if (isTouchRotating) {
+                    isTouchRotating = false;
+                    // Riabilita il drag
+                    map.dragging.enable();
+                }
             });
         }
         
