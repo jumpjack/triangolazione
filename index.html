@@ -56,6 +56,386 @@
             transform: scale(0.95);
         }
         
+        .mode-btn {
+            padding: 12px 24px;
+            font-size: 14px;
+        }
+        
+        #debugBtn {
+            background: #6b7280;
+        }
+        
+        #debugBtn.active {
+            background: #f59e0b;
+        }
+        
+        #gpsBtn {
+            background: #10b981;
+        }
+        
+        #gpsBtn.active {
+            background: #059669;
+        }
+        
+        .mode-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .debug-controls {
+            display: none;
+            background: white;
+            padding: 16px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            margin-bottom: 10px;
+        }
+        
+        .debug-controls.active {
+            display: block;
+        }
+        
+        .debug-controls input[type="range"] {
+            width: 200px;
+            margin: 0 10px;
+        }
+        
+        .debug-controls label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .info-panel {
+            background: white;
+            padding: 12px 20px;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+            font-size: 14px;
+            text-align: center;
+        }
+        
+        .info-panel strong {
+            color: #2563eb;
+        }
+        
+        .error {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: #ef4444;
+            color: white;
+            padding: 12px 24px;
+            border-radius: 8px;
+            z-index: 1001;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="map"></div>
+    
+    <div class="error" id="error"></div>
+    
+    <div class="controls">
+        <div class="debug-controls" id="debugControls">
+            <label>
+                Latitudine: <input type="number" id="debugLat" step="0.0001" value="41.9028">
+            </label>
+            <label>
+                Longitudine: <input type="number" id="debugLng" step="0.0001" value="12.4964">
+            </label>
+            <label>
+                Direzione: <input type="range" id="debugHeading" min="0" max="360" value="0">
+                <span id="debugHeadingValue">0</span>°
+            </label>
+            <button class="btn" id="applyDebug" style="padding: 8px 16px; font-size: 14px;">Applica</button>
+        </div>
+        
+        <div class="info-panel">
+            <div>Direzione: <strong id="heading">--</strong>°</div>
+            <div>Linee tracciate: <strong id="lineCount">0</strong></div>
+        </div>
+        
+        <div class="mode-buttons">
+            <button class="btn mode-btn" id="debugBtn">DEBUG</button>
+            <button class="btn mode-btn active" id="gpsBtn">GPS</button>
+        </div>
+        <button class="btn" id="submitBtn">Traccia Linea</button>
+    </div>
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+    <script>
+        let map;
+        let userMarker;
+        let currentPosition = null;
+        let currentHeading = 0;
+        let lineCount = 0;
+        const lines = [];
+        let debugMode = false;
+        let watchId = null;
+        
+        // Inizializza mappa
+        map = L.map('map', {
+            center: [41.9028, 12.4964],
+            zoom: 15,
+            zoomControl: true,
+            rotate: true,
+            bearing: 0,
+            touchRotate: true,
+            rotateControl: true
+        });
+        
+        // Tile layer
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '© OpenStreetMap contributors'
+        }).addTo(map);
+        
+        // Icona personalizzata per l'utente (punto fisso)
+        const userIcon = L.divIcon({
+            className: 'user-marker',
+            html: `<div style="width: 30px; height: 30px; position: relative;">
+                    <div style="width: 0; height: 0; border-left: 15px solid transparent; border-right: 15px solid transparent; border-bottom: 30px solid #2563eb; position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); transform-origin: center;" id="arrowIcon"></div>
+                   </div>`,
+            iconSize: [30, 30],
+            iconAnchor: [15, 15]
+        });
+        
+        // Gestione geolocalizzazione
+        function updatePosition(position) {
+            const lat = position.coords.latitude;
+            const lng = position.coords.longitude;
+            currentPosition = [lat, lng];
+            
+            if (!userMarker) {
+                userMarker = L.marker(currentPosition, { icon: userIcon }).addTo(map);
+                map.setView(currentPosition, 17);
+            } else {
+                userMarker.setLatLng(currentPosition);
+            }
+        }
+        
+        function showError(message) {
+            const errorDiv = document.getElementById('error');
+            errorDiv.textContent = message;
+            errorDiv.style.display = 'block';
+            setTimeout(() => {
+                errorDiv.style.display = 'none';
+            }, 3000);
+        }
+        
+        // Richiedi geolocalizzazione
+        function startTracking() {
+            if ('geolocation' in navigator) {
+                watchId = navigator.geolocation.watchPosition(
+                    updatePosition,
+                    (error) => showError('Errore geolocalizzazione: ' + error.message),
+                    { enableHighAccuracy: true, maximumAge: 0 }
+                );
+            } else {
+                showError('Geolocalizzazione non supportata');
+            }
+        }
+        
+        function stopTracking() {
+            if (watchId !== null) {
+                navigator.geolocation.clearWatch(watchId);
+                watchId = null;
+            }
+        }
+        
+        startTracking();
+        
+        // Gestione orientamento dispositivo
+        function handleOrientation(event) {
+            if (debugMode) return;
+            
+            let heading = null;
+            
+            if (event.webkitCompassHeading !== undefined) {
+                // iOS
+                heading = event.webkitCompassHeading;
+            } else if (event.alpha !== null) {
+                // Android
+                heading = 360 - event.alpha;
+            }
+            
+            if (heading !== null) {
+                currentHeading = heading;
+                document.getElementById('heading').textContent = Math.round(heading);
+                
+                // Ruota la mappa
+                map.setBearing(-heading);
+            }
+        }
+        
+        // Richiedi permesso per orientamento (iOS 13+)
+        function requestOrientationPermission() {
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation, true);
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                window.addEventListener('deviceorientation', handleOrientation, true);
+            }
+        }
+        
+        requestOrientationPermission();
+        
+        // Funzione per calcolare punto finale della linea
+        function calculateEndPoint(startLat, startLng, heading, distanceKm = 10) {
+            const R = 6371; // Raggio Terra in km
+            const headingRad = (heading * Math.PI) / 180;
+            const lat1 = (startLat * Math.PI) / 180;
+            const lng1 = (startLng * Math.PI) / 180;
+            
+            const lat2 = Math.asin(
+                Math.sin(lat1) * Math.cos(distanceKm / R) +
+                Math.cos(lat1) * Math.sin(distanceKm / R) * Math.cos(headingRad)
+            );
+            
+            const lng2 = lng1 + Math.atan2(
+                Math.sin(headingRad) * Math.sin(distanceKm / R) * Math.cos(lat1),
+                Math.cos(distanceKm / R) - Math.sin(lat1) * Math.sin(lat2)
+            );
+            
+            return [
+                (lat2 * 180) / Math.PI,
+                (lng2 * 180) / Math.PI
+            ];
+        }
+        
+        // Pulsante submit
+        document.getElementById('submitBtn').addEventListener('click', () => {
+            if (!currentPosition) {
+                showError('Posizione non disponibile');
+                return;
+            }
+            
+            const endPoint = calculateEndPoint(
+                currentPosition[0],
+                currentPosition[1],
+                currentHeading,
+                10
+            );
+            
+            const line = L.polyline([currentPosition, endPoint], {
+                color: '#ef4444',
+                weight: 3,
+                opacity: 0.7
+            }).addTo(map);
+            
+            lines.push(line);
+            lineCount++;
+            document.getElementById('lineCount').textContent = lineCount;
+            
+            // Aggiungi marker all'inizio della linea
+            L.circleMarker(currentPosition, {
+                radius: 5,
+                fillColor: '#ef4444',
+                color: '#fff',
+                weight: 2,
+                opacity: 1,
+                fillOpacity: 0.8
+            }).addTo(map);
+        });
+        
+        // Pulsante DEBUG
+        document.getElementById('debugBtn').addEventListener('click', () => {
+            if (debugMode) return; // Già in modalità debug
+            
+            debugMode = true;
+            document.getElementById('debugBtn').classList.add('active');
+            document.getElementById('gpsBtn').classList.remove('active');
+            document.getElementById('debugControls').classList.add('active');
+            
+            stopTracking();
+            map.dragging.enable();
+            map.scrollWheelZoom.enable();
+            
+            // Imposta valori attuali nei controlli
+            if (currentPosition) {
+                document.getElementById('debugLat').value = currentPosition[0].toFixed(4);
+                document.getElementById('debugLng').value = currentPosition[1].toFixed(4);
+            }
+            document.getElementById('debugHeading').value = Math.round(currentHeading);
+            document.getElementById('debugHeadingValue').textContent = Math.round(currentHeading);
+        });
+        
+        // Pulsante GPS
+        document.getElementById('gpsBtn').addEventListener('click', () => {
+            if (!debugMode) return; // Già in modalità GPS
+            
+            debugMode = false;
+            document.getElementById('gpsBtn').classList.add('active');
+            document.getElementById('debugBtn').classList.remove('active');
+            document.getElementById('debugControls').classList.remove('active');
+            
+            startTracking();
+            requestOrientationPermission();
+            
+            // Centra sulla posizione attuale se disponibile
+            if (currentPosition) {
+                map.setView(currentPosition, 17);
+                map.setBearing(-currentHeading);
+            }
+        });
+        
+        // Slider direzione debug
+        document.getElementById('debugHeading').addEventListener('input', (e) => {
+            const heading = parseInt(e.target.value);
+            document.getElementById('debugHeadingValue').textContent = heading;
+            currentHeading = heading;
+            document.getElementById('heading').textContent = heading;
+            map.setBearing(-heading);
+        });
+        
+        // Pulsante applica debug
+        document.getElementById('applyDebug').addEventListener('click', () => {
+            const lat = parseFloat(document.getElementById('debugLat').value);
+            const lng = parseFloat(document.getElementById('debugLng').value);
+            
+            if (!isNaN(lat) && !isNaN(lng)) {
+                currentPosition = [lat, lng];
+                
+                if (!userMarker) {
+                    userMarker = L.marker(currentPosition, { icon: userIcon }).addTo(map);
+                } else {
+                    userMarker.setLatLng(currentPosition);
+                }
+                
+                map.setView(currentPosition, map.getZoom());
+            }
+        });
+    </script>
+</body>
+</html>        .btn {
+            background: #2563eb;
+            color: white;
+            border: none;
+            padding: 16px 32px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: 600;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.4);
+            transition: all 0.3s ease;
+        }
+        
+        .btn:hover {
+            background: #1d4ed8;
+            transform: scale(1.05);
+        }
+        
+        .btn:active {
+            transform: scale(0.95);
+        }
+        
         #debugBtn {
             background: #6b7280;
             padding: 12px 24px;
