@@ -16,28 +16,10 @@
             overflow: hidden;
         }
         
-        .map-wrapper {
-            width: 100%;
-            height: 100vh;
-            overflow: hidden;
-            position: absolute;
-            top: 0;
-            left: 0;
-        }
-        
         #map {
             width: 100%;
-            height: 100%;
-            transform: rotate(0deg);
-            transition: transform 0.5s ease;
-        }
-        
-        #map.rotated {
-            width: 141.42%;
-            height: 141.42%;
-            left: -20.71%;
-            top: -20.71%;
-            position: absolute;
+            height: 100vh;
+            z-index: 1;
         }
         
         .controls {
@@ -74,6 +56,14 @@
         
         #disableGPS:hover {
             background-color: #d32f2f;
+        }
+        
+        #resetRotation {
+            background-color: #2196F3;
+        }
+        
+        #resetRotation:hover {
+            background-color: #0b7dda;
         }
         
         .status {
@@ -124,21 +114,58 @@
             transform: translateY(-50%);
         }
         
-        .compass {
+        /* Bussola grafica */
+        .compass-graphic {
             position: absolute;
             top: 80px;
             right: 20px;
             z-index: 1000;
             background: white;
-            width: 60px;
-            height: 60px;
+            width: 80px;
+            height: 80px;
             border-radius: 50%;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 24px;
+        }
+        
+        .compass-rose {
+            width: 70px;
+            height: 70px;
+            border-radius: 50%;
+            position: relative;
+            transition: transform 0.2s ease;
+        }
+        
+        .compass-north {
+            position: absolute;
+            top: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: red;
             font-weight: bold;
+            font-size: 14px;
+        }
+        
+        .compass-needle {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 4px;
+            height: 60px;
+            background: red;
+            border-radius: 2px;
+        }
+        
+        .compass-direction {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: #333;
         }
         
         /* Stili per gli slider */
@@ -210,9 +237,7 @@
     </style>
 </head>
 <body>
-    <div class="map-wrapper">
-        <div id="map"></div>
-    </div>
+    <div id="map"></div>
     
     <!-- Indicatore centrale sempre visibile -->
     <div class="center-marker">
@@ -223,6 +248,7 @@
         <button id="submit">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
+        <button id="resetRotation">Reset Rotazione</button>
         
         <div class="sliders-title">Regola Triangolo</div>
         
@@ -246,7 +272,14 @@
         <div class="status" id="status">GPS attivo</div>
     </div>
     
-    <div class="compass" id="compass">N</div>
+    <!-- Bussola grafica -->
+    <div class="compass-graphic">
+        <div class="compass-rose" id="compassRose">
+            <div class="compass-north">N</div>
+            <div class="compass-needle"></div>
+            <div class="compass-direction" id="compassDirection">0°</div>
+        </div>
+    </div>
 
     <!-- Leaflet JS -->
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -261,9 +294,10 @@
         let triangles = [];
         let currentRotation = 0;
         let isRotating = false;
-        let rotationStartX = 0;
+        let isDragging = false;
         let controlPressed = false;
-        let dragStart = null;
+        let rotationStartAngle = 0;
+        let dragStartPoint = null;
         
         // Variabili per i slider
         let baseWidth = 500; // metri (larghezza base)
@@ -306,8 +340,7 @@
             }).addTo(map);
             
             // Configura gli eventi per la rotazione e il trascinamento
-            setupRotationEvents();
-            setupDragEvents();
+            setupMapEvents();
             
             // Configura gli slider
             setupSliders();
@@ -319,8 +352,8 @@
             startGPS();
         }
         
-        // Configura gli eventi per la rotazione
-        function setupRotationEvents() {
+        // Configura gli eventi della mappa
+        function setupMapEvents() {
             const mapContainer = map.getContainer();
             
             // Eventi per il tasto Control
@@ -340,11 +373,24 @@
                 }
             });
             
-            // Mouse events per la rotazione
+            // Mouse events per rotazione e trascinamento
             mapContainer.addEventListener('mousedown', function(e) {
                 if (controlPressed && !gpsEnabled && e.button === 0) {
+                    // Modalità rotazione
                     isRotating = true;
-                    rotationStartX = e.clientX;
+                    rotationStartAngle = calculateAngleFromCenter(e.clientX, e.clientY);
+                    mapContainer.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                } else if (!gpsEnabled && !controlPressed && e.button === 0) {
+                    // Modalità trascinamento
+                    isDragging = true;
+                    const point = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
+                    dragStartPoint = {
+                        clientX: e.clientX,
+                        clientY: e.clientY,
+                        latLng: point
+                    };
                     mapContainer.style.cursor = 'grabbing';
                     e.preventDefault();
                     e.stopPropagation();
@@ -353,14 +399,34 @@
             
             document.addEventListener('mousemove', function(e) {
                 if (isRotating && controlPressed && !gpsEnabled) {
-                    const deltaX = e.clientX - rotationStartX;
-                    const rotationDelta = deltaX * 0.5;
+                    // Rotazione della mappa basata sull'angolo del mouse
+                    const currentAngle = calculateAngleFromCenter(e.clientX, e.clientY);
+                    const angleDelta = currentAngle - rotationStartAngle;
                     
-                    currentRotation = (currentRotation + rotationDelta) % 360;
+                    currentRotation = (currentRotation + angleDelta) % 360;
                     if (currentRotation < 0) currentRotation += 360;
                     
                     applyMapRotation();
-                    rotationStartX = e.clientX;
+                    rotationStartAngle = currentAngle;
+                    e.preventDefault();
+                    e.stopPropagation();
+                } else if (isDragging && !gpsEnabled) {
+                    // Trascinamento della mappa - il punto sotto il mouse rimane sotto il mouse
+                    if (dragStartPoint) {
+                        const currentPoint = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
+                        const latDelta = dragStartPoint.latLng.lat - currentPoint.lat;
+                        const lngDelta = dragStartPoint.latLng.lng - currentPoint.lng;
+                        
+                        const newCenter = L.latLng(
+                            map.getCenter().lat + latDelta,
+                            map.getCenter().lng + lngDelta
+                        );
+                        
+                        map.setView(newCenter, map.getZoom(), { animate: false });
+                        
+                        // Aggiorna il punto di inizio per il prossimo movimento
+                        dragStartPoint.latLng = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
+                    }
                     e.preventDefault();
                     e.stopPropagation();
                 }
@@ -375,118 +441,122 @@
                     e.preventDefault();
                     e.stopPropagation();
                 }
-            });
-            
-            // Previeni il comportamento di default del contest menu
-            mapContainer.addEventListener('contextmenu', function(e) {
-                if (controlPressed) {
-                    e.preventDefault();
-                }
-            });
-            
-            // Touch events per mobile (rotazione con due dita)
-            let touchStartDistance = 0;
-            let touchStartAngle = 0;
-            let isTouchRotating = false;
-            
-            mapContainer.addEventListener('touchstart', function(e) {
-                if (!gpsEnabled && e.touches.length === 2) {
-                    isTouchRotating = true;
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-                    
-                    touchStartDistance = Math.hypot(
-                        touch2.clientX - touch1.clientX,
-                        touch2.clientY - touch1.clientY
-                    );
-                    touchStartAngle = Math.atan2(
-                        touch2.clientY - touch1.clientY,
-                        touch2.clientX - touch1.clientX
-                    ) * 180 / Math.PI;
-                    
-                    e.preventDefault();
-                }
-            });
-            
-            mapContainer.addEventListener('touchmove', function(e) {
-                if (!gpsEnabled && isTouchRotating && e.touches.length === 2) {
-                    const touch1 = e.touches[0];
-                    const touch2 = e.touches[1];
-                    
-                    const currentAngle = Math.atan2(
-                        touch2.clientY - touch1.clientY,
-                        touch2.clientX - touch1.clientX
-                    ) * 180 / Math.PI;
-                    
-                    const angleDelta = currentAngle - touchStartAngle;
-                    currentRotation = (currentRotation + angleDelta) % 360;
-                    if (currentRotation < 0) currentRotation += 360;
-                    
-                    applyMapRotation();
-                    touchStartAngle = currentAngle;
-                    
-                    e.preventDefault();
-                }
-            });
-            
-            mapContainer.addEventListener('touchend', function() {
-                if (isTouchRotating) {
-                    isTouchRotating = false;
-                }
-            });
-        }
-        
-        // Configura gli eventi per il trascinamento
-        function setupDragEvents() {
-            const mapContainer = map.getContainer();
-            
-            mapContainer.addEventListener('mousedown', function(e) {
-                // Solo se il GPS è disattivato e non stiamo ruotando
-                if (!gpsEnabled && !controlPressed && e.button === 0) {
-                    dragStart = {
-                        x: e.clientX,
-                        y: e.clientY,
-                        center: map.getCenter(),
-                        zoom: map.getZoom()
-                    };
-                    mapContainer.style.cursor = 'grabbing';
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mousemove', function(e) {
-                if (dragStart) {
-                    const deltaX = e.clientX - dragStart.x;
-                    const deltaY = e.clientY - dragStart.y;
-                    
-                    // Ruota il vettore di spostamento dell'angolo corrente
-                    const angle = currentRotation * Math.PI / 180;
-                    const cos = Math.cos(angle);
-                    const sin = Math.sin(angle);
-                    const rotatedDeltaX = deltaX * cos - deltaY * sin;
-                    const rotatedDeltaY = deltaX * sin + deltaY * cos;
-                    
-                    // Calcola il nuovo centro in coordinate mondo
-                    const worldCenter = map.project(dragStart.center, dragStart.zoom);
-                    const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
-                    const newCenter = map.unproject(newWorldCenter, dragStart.zoom);
-                    
-                    map.setView(newCenter, dragStart.zoom, { animate: false });
-                    
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mouseup', function(e) {
-                if (dragStart && e.button === 0) {
-                    dragStart = null;
+                if (isDragging && e.button === 0) {
+                    isDragging = false;
+                    dragStartPoint = null;
                     mapContainer.style.cursor = '';
                     e.preventDefault();
                     e.stopPropagation();
                 }
             });
+            
+            // Touch events per mobile
+            let touchStartDistance = 0;
+            let touchStartAngle = 0;
+            let isTouchRotating = false;
+            let isTouchDragging = false;
+            let touchStartPoint = null;
+            
+            mapContainer.addEventListener('touchstart', function(e) {
+                if (!gpsEnabled) {
+                    if (e.touches.length === 2) {
+                        // Rotazione con due dita
+                        isTouchRotating = true;
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        
+                        touchStartDistance = Math.hypot(
+                            touch2.clientX - touch1.clientX,
+                            touch2.clientY - touch1.clientY
+                        );
+                        touchStartAngle = Math.atan2(
+                            touch2.clientY - touch1.clientY,
+                            touch2.clientX - touch1.clientX
+                        ) * 180 / Math.PI;
+                        
+                        e.preventDefault();
+                    } else if (e.touches.length === 1) {
+                        // Trascinamento con un dito
+                        isTouchDragging = true;
+                        const touch = e.touches[0];
+                        const point = map.containerPointToLatLng(map.mouseEventToContainerPoint({
+                            clientX: touch.clientX,
+                            clientY: touch.clientY
+                        }));
+                        touchStartPoint = {
+                            clientX: touch.clientX,
+                            clientY: touch.clientY,
+                            latLng: point
+                        };
+                        e.preventDefault();
+                    }
+                }
+            });
+            
+            mapContainer.addEventListener('touchmove', function(e) {
+                if (!gpsEnabled) {
+                    if (isTouchRotating && e.touches.length === 2) {
+                        const touch1 = e.touches[0];
+                        const touch2 = e.touches[1];
+                        
+                        const currentAngle = Math.atan2(
+                            touch2.clientY - touch1.clientY,
+                            touch2.clientX - touch1.clientX
+                        ) * 180 / Math.PI;
+                        
+                        const angleDelta = currentAngle - touchStartAngle;
+                        currentRotation = (currentRotation + angleDelta) % 360;
+                        if (currentRotation < 0) currentRotation += 360;
+                        
+                        applyMapRotation();
+                        touchStartAngle = currentAngle;
+                        
+                        e.preventDefault();
+                    } else if (isTouchDragging && e.touches.length === 1) {
+                        const touch = e.touches[0];
+                        if (touchStartPoint) {
+                            const currentPoint = map.containerPointToLatLng(map.mouseEventToContainerPoint({
+                                clientX: touch.clientX,
+                                clientY: touch.clientY
+                            }));
+                            const latDelta = touchStartPoint.latLng.lat - currentPoint.lat;
+                            const lngDelta = touchStartPoint.latLng.lng - currentPoint.lng;
+                            
+                            const newCenter = L.latLng(
+                                map.getCenter().lat + latDelta,
+                                map.getCenter().lng + lngDelta
+                            );
+                            
+                            map.setView(newCenter, map.getZoom(), { animate: false });
+                            
+                            // Aggiorna il punto di inizio per il prossimo movimento
+                            touchStartPoint.latLng = map.containerPointToLatLng(map.mouseEventToContainerPoint({
+                                clientX: touch.clientX,
+                                clientY: touch.clientY
+                            }));
+                        }
+                        e.preventDefault();
+                    }
+                }
+            });
+            
+            mapContainer.addEventListener('touchend', function() {
+                isTouchRotating = false;
+                isTouchDragging = false;
+                touchStartPoint = null;
+            });
+        }
+        
+        // Calcola l'angolo del mouse rispetto al centro della mappa
+        function calculateAngleFromCenter(clientX, clientY) {
+            const mapRect = map.getContainer().getBoundingClientRect();
+            const centerX = mapRect.left + mapRect.width / 2;
+            const centerY = mapRect.top + mapRect.height / 2;
+            
+            const deltaX = clientX - centerX;
+            const deltaY = clientY - centerY;
+            
+            return Math.atan2(deltaY, deltaX) * 180 / Math.PI;
         }
         
         // Configura gli slider
@@ -544,28 +614,25 @@
         function applyMapRotation() {
             const mapContainer = map.getContainer();
             mapContainer.style.transform = `rotate(${currentRotation}deg)`;
-            
-            // Applica la classe 'rotated' solo se la mappa è effettivamente ruotata
-            if (currentRotation % 360 === 0) {
-                mapContainer.classList.remove('rotated');
-            } else {
-                mapContainer.classList.add('rotated');
-            }
-            
             updateCompass();
         }
         
-        // Aggiorna la bussola (solo testo, senza rotazione)
+        // Aggiorna la bussola grafica
         function updateCompass() {
-            const compass = document.getElementById('compass');
+            const compassRose = document.getElementById('compassRose');
+            const compassDirection = document.getElementById('compassDirection');
             
-            // Calcola la direzione cardinale in base alla rotazione
-            const normalizedRotation = (360 - currentRotation) % 360;
+            // Ruota la bussola per mostrare l'orientamento
+            compassRose.style.transform = `rotate(${currentRotation}deg)`;
             
-            // Mostra la direzione cardinale
-            const directions = ['N', 'NE', 'E', 'SE', 'S', 'SW', 'W', 'NW'];
-            const index = Math.round(normalizedRotation / 45) % 8;
-            compass.textContent = directions[index];
+            // Mostra la direzione in gradi
+            compassDirection.textContent = Math.round(currentRotation) + '°';
+        }
+        
+        // Resetta la rotazione
+        function resetRotation() {
+            currentRotation = 0;
+            applyMapRotation();
         }
         
         // Avvia il tracciamento GPS
@@ -735,6 +802,9 @@
                 document.getElementById('enableGPS').style.display = 'none';
                 document.getElementById('disableGPS').style.display = 'block';
             });
+            
+            // Gestione del pulsante Reset Rotazione
+            document.getElementById('resetRotation').addEventListener('click', resetRotation);
         });
     </script>
 </body>
