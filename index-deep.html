@@ -16,10 +16,28 @@
             overflow: hidden;
         }
         
-        #map {
+        .map-wrapper {
             width: 100%;
             height: 100vh;
-            z-index: 1;
+            overflow: hidden;
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+            transform: rotate(0deg);
+            transition: transform 0.5s ease;
+        }
+        
+        #map.rotated {
+            width: 141.42%;
+            height: 141.42%;
+            left: -20.71%;
+            top: -20.71%;
+            position: absolute;
         }
         
         .controls {
@@ -192,7 +210,9 @@
     </style>
 </head>
 <body>
-    <div id="map"></div>
+    <div class="map-wrapper">
+        <div id="map"></div>
+    </div>
     
     <!-- Indicatore centrale sempre visibile -->
     <div class="center-marker">
@@ -243,6 +263,7 @@
         let isRotating = false;
         let rotationStartX = 0;
         let controlPressed = false;
+        let dragStart = null;
         
         // Variabili per i slider
         let baseWidth = 500; // metri (larghezza base)
@@ -256,8 +277,8 @@
             // Crea la mappa centrata su Roma (posizione di default)
             map = L.map('map', {
                 zoomControl: true,
-                // Usa il drag normale di Leaflet
-                dragging: true
+                // Disabilita il drag nativo di Leaflet per gestirlo manualmente
+                dragging: false
             }).setView([41.9028, 12.4964], 15);
             
             // Aggiungi il layer di base OpenStreetMap
@@ -284,8 +305,9 @@
                 weight: 1
             }).addTo(map);
             
-            // Configura gli eventi per la rotazione
+            // Configura gli eventi per la rotazione e il trascinamento
             setupRotationEvents();
+            setupDragEvents();
             
             // Configura gli slider
             setupSliders();
@@ -324,8 +346,6 @@
                     isRotating = true;
                     rotationStartX = e.clientX;
                     mapContainer.style.cursor = 'grabbing';
-                    // Disabilita temporaneamente il drag di Leaflet durante la rotazione
-                    map.dragging.disable();
                     e.preventDefault();
                     e.stopPropagation();
                 }
@@ -349,8 +369,6 @@
             document.addEventListener('mouseup', function(e) {
                 if (isRotating && e.button === 0) {
                     isRotating = false;
-                    // Riabilita il drag di Leaflet
-                    map.dragging.enable();
                     if (controlPressed) {
                         mapContainer.style.cursor = 'grab';
                     }
@@ -386,8 +404,6 @@
                         touch2.clientX - touch1.clientX
                     ) * 180 / Math.PI;
                     
-                    // Disabilita il drag durante la rotazione touch
-                    map.dragging.disable();
                     e.preventDefault();
                 }
             });
@@ -416,8 +432,59 @@
             mapContainer.addEventListener('touchend', function() {
                 if (isTouchRotating) {
                     isTouchRotating = false;
-                    // Riabilita il drag
-                    map.dragging.enable();
+                }
+            });
+        }
+        
+        // Configura gli eventi per il trascinamento
+        function setupDragEvents() {
+            const mapContainer = map.getContainer();
+            
+            mapContainer.addEventListener('mousedown', function(e) {
+                // Solo se il GPS è disattivato e non stiamo ruotando
+                if (!gpsEnabled && !controlPressed && e.button === 0) {
+                    dragStart = {
+                        x: e.clientX,
+                        y: e.clientY,
+                        center: map.getCenter(),
+                        zoom: map.getZoom()
+                    };
+                    mapContainer.style.cursor = 'grabbing';
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+            
+            document.addEventListener('mousemove', function(e) {
+                if (dragStart) {
+                    const deltaX = e.clientX - dragStart.x;
+                    const deltaY = e.clientY - dragStart.y;
+                    
+                    // Ruota il vettore di spostamento dell'angolo corrente
+                    const angle = currentRotation * Math.PI / 180;
+                    const cos = Math.cos(angle);
+                    const sin = Math.sin(angle);
+                    const rotatedDeltaX = deltaX * cos - deltaY * sin;
+                    const rotatedDeltaY = deltaX * sin + deltaY * cos;
+                    
+                    // Calcola il nuovo centro in coordinate mondo
+                    const worldCenter = map.project(dragStart.center, dragStart.zoom);
+                    const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
+                    const newCenter = map.unproject(newWorldCenter, dragStart.zoom);
+                    
+                    map.setView(newCenter, dragStart.zoom, { animate: false });
+                    
+                    e.preventDefault();
+                    e.stopPropagation();
+                }
+            });
+            
+            document.addEventListener('mouseup', function(e) {
+                if (dragStart && e.button === 0) {
+                    dragStart = null;
+                    mapContainer.style.cursor = '';
+                    e.preventDefault();
+                    e.stopPropagation();
                 }
             });
         }
@@ -477,6 +544,14 @@
         function applyMapRotation() {
             const mapContainer = map.getContainer();
             mapContainer.style.transform = `rotate(${currentRotation}deg)`;
+            
+            // Applica la classe 'rotated' solo se la mappa è effettivamente ruotata
+            if (currentRotation % 360 === 0) {
+                mapContainer.classList.remove('rotated');
+            } else {
+                mapContainer.classList.add('rotated');
+            }
+            
             updateCompass();
         }
         
