@@ -89,6 +89,13 @@
             text-align: center;
         }
         
+        .build-info {
+            margin-top: 5px;
+            font-size: 10px;
+            color: #888;
+            text-align: center;
+        }
+        
         /* Indicatore centrale */
         .center-marker {
             position: absolute;
@@ -357,6 +364,7 @@
         
         <div class="help-text">CTRL + Trascina per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
+        <div class="build-info" id="buildInfo">Build: 2.1</div>
     </div>
     
     <!-- Bussola grafica -->
@@ -372,6 +380,9 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     
     <script>
+        // Numero di build - incrementa ad ogni aggiornamento
+        const BUILD_NUMBER = "2.1";
+        
         // Variabili globali
         let map;
         let userMarker;
@@ -422,6 +433,9 @@
             
             // Configura gli slider
             setupSliders();
+            
+            // Mostra il numero di build
+            document.getElementById('buildInfo').textContent = "Build: " + BUILD_NUMBER;
             
             // Applica la rotazione iniziale
             applyMapRotation();
@@ -481,10 +495,10 @@
                     // Rotazione della mappa basata sull'angolo del mouse
                     const currentAngle = calculateAngleFromCenter(e.clientX, e.clientY);
                     
-                    // Calcola la differenza di angolo tenendo conto del passaggio attraverso 0°/360°
+                    // Calcola la differenza di angolo
                     let angleDelta = currentAngle - rotationStartAngle;
                     
-                    // Gestisce il caso in cui l'angolo passa attraverso 0°/360°
+                    // Gestisce il passaggio attraverso 0°/360° in modo fluido
                     if (angleDelta > 180) {
                         angleDelta -= 360;
                     } else if (angleDelta < -180) {
@@ -597,10 +611,10 @@
                             touch2.clientX - touch1.clientX
                         ) * 180 / Math.PI;
                         
-                        // Calcola la differenza di angolo tenendo conto del passaggio attraverso 0°/360°
+                        // Calcola la differenza di angolo
                         let angleDelta = currentAngle - touchStartAngle;
                         
-                        // Gestisce il caso in cui l'angolo passa attraverso 0°/360°
+                        // Gestisce il passaggio attraverso 0°/360° in modo fluido
                         if (angleDelta > 180) {
                             angleDelta -= 360;
                         } else if (angleDelta < -180) {
