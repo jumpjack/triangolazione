@@ -362,9 +362,9 @@
             <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSlider">
         </div>
         
-        <div class="help-text">CTRL + Trascina per ruotare</div>
+        <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 2.4</div>
+        <div class="build-info" id="buildInfo">Build: 3.0</div>
     </div>
     
     <!-- Bussola grafica -->
@@ -381,7 +381,7 @@
     
     <script>
         // Numero di build - incrementa ad ogni aggiornamento
-        const BUILD_NUMBER = "2.4";
+        const BUILD_NUMBER = "3.0";
         
         // Variabili globali
         let map;
@@ -393,7 +393,7 @@
         let isRotating = false;
         let isDragging = false;
         let controlPressed = false;
-        let rotationStartAngle = 0;
+        let rotationStartX = 0;
         let dragStartPoint = null;
         let previousRotation = 0;
         
@@ -468,9 +468,9 @@
             // Mouse events per rotazione e trascinamento
             mapContainer.addEventListener('mousedown', function(e) {
                 if (controlPressed && !gpsEnabled && e.button === 0) {
-                    // Modalità rotazione
+                    // Modalità rotazione - usa solo lo spostamento orizzontale
                     isRotating = true;
-                    rotationStartAngle = calculateAngleFromCenter(e.clientX, e.clientY);
+                    rotationStartX = e.clientX;
                     previousRotation = currentRotation;
                     mapContainer.style.cursor = 'grabbing';
                     e.preventDefault();
@@ -492,20 +492,17 @@
             
             document.addEventListener('mousemove', function(e) {
                 if (isRotating && controlPressed && !gpsEnabled) {
-                    // Rotazione della mappa basata sull'angolo del mouse
-                    const currentAngle = calculateAngleFromCenter(e.clientX, e.clientY);
+                    // Rotazione basata sullo spostamento orizzontale del mouse
+                    const deltaX = e.clientX - rotationStartX;
+                    const rotationDelta = deltaX * 0.5; // Fattore di sensibilità
                     
-                    // Calcola la differenza di angolo
-                    let angleDelta = currentAngle - rotationStartAngle;
-                    
-
                     // Aggiorna la rotazione
-                    currentRotation = previousRotation + angleDelta;
+                    currentRotation = previousRotation + rotationDelta;
                     
                     // Normalizza la rotazione tra 0 e 360 per la visualizzazione
                     const normalizedRotation = ((currentRotation % 360) + 360) % 360;
                     
-                    applyMapRotation(currentRotation);
+                    applyMapRotation(normalizedRotation);
                     e.preventDefault();
                     e.stopPropagation();
                 } else if (isDragging && !gpsEnabled) {
@@ -559,24 +556,15 @@
             let isTouchDragging = false;
             let touchStartPoint = null;
             let touchPreviousRotation = 0;
+            let touchStartX = 0;
             
             mapContainer.addEventListener('touchstart', function(e) {
                 if (!gpsEnabled) {
                     if (e.touches.length === 2) {
-                        // Rotazione con due dita
+                        // Rotazione con due dita - usa solo lo spostamento orizzontale
                         isTouchRotating = true;
-                        const touch1 = e.touches[0];
-                        const touch2 = e.touches[1];
-                        
-                        touchStartDistance = Math.hypot(
-                            touch2.clientX - touch1.clientX,
-                            touch2.clientY - touch1.clientY
-                        );
-                        touchStartAngle = Math.atan2(
-                            touch2.clientY - touch1.clientY,
-                            touch2.clientX - touch1.clientX
-                        ) * 180 / Math.PI;
-                        
+                        const touch = e.touches[0];
+                        touchStartX = touch.clientX;
                         touchPreviousRotation = currentRotation;
                         e.preventDefault();
                     } else if (e.touches.length === 1) {
@@ -597,31 +585,17 @@
             mapContainer.addEventListener('touchmove', function(e) {
                 if (!gpsEnabled) {
                     if (isTouchRotating && e.touches.length === 2) {
-                        const touch1 = e.touches[0];
-                        const touch2 = e.touches[1];
-                        
-                        const currentAngle = Math.atan2(
-                            touch2.clientY - touch1.clientY,
-                            touch2.clientX - touch1.clientX
-                        ) * 180 / Math.PI;
-                        
-                        // Calcola la differenza di angolo
-                        let angleDelta = currentAngle - touchStartAngle;
-                        
-                        // Gestisce il passaggio attraverso 0°/360° in modo fluido
-                        if (angleDelta > 180) {
-                            angleDelta -= 360;
-                        } else if (angleDelta < -180) {
-                            angleDelta += 360;
-                        }
+                        const touch = e.touches[0];
+                        const deltaX = touch.clientX - touchStartX;
+                        const rotationDelta = deltaX * 0.5;
                         
                         // Aggiorna la rotazione
-                        currentRotation = touchPreviousRotation + angleDelta;
+                        currentRotation = touchPreviousRotation + rotationDelta;
                         
                         // Normalizza la rotazione tra 0 e 360 per la visualizzazione
                         const normalizedRotation = ((currentRotation % 360) + 360) % 360;
                         
-                        applyMapRotation(currentRotation);
+                        applyMapRotation(normalizedRotation);
                         e.preventDefault();
                     } else if (isTouchDragging && e.touches.length === 1) {
                         const touch = e.touches[0];
@@ -654,18 +628,6 @@
                 isTouchDragging = false;
                 touchStartPoint = null;
             });
-        }
-        
-        // Calcola l'angolo del mouse rispetto al centro della mappa
-        function calculateAngleFromCenter(clientX, clientY) {
-            const mapRect = map.getContainer().getBoundingClientRect();
-            const centerX = mapRect.left + mapRect.width / 2;
-            const centerY = mapRect.top + mapRect.height / 2;
-            
-            const deltaX = clientX - centerX;
-            const deltaY = clientY - centerY;
-            
-            return Math.atan2(deltaY, deltaX) * 180 / Math.PI;
         }
         
         // Configura gli slider
