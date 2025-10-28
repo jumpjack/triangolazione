@@ -20,6 +20,7 @@
             width: 100%;
             height: 100vh;
             z-index: 1;
+            transition: transform 0.1s ease;
         }
         
         .controls {
@@ -288,7 +289,6 @@
         // Variabili globali
         let map;
         let userMarker;
-        let userAccuracyCircle;
         let watchId;
         let gpsEnabled = true;
         let triangles = [];
@@ -328,15 +328,6 @@
                     iconSize: [16, 16],
                     iconAnchor: [8, 8]
                 })
-            }).addTo(map);
-            
-            // Inizializza il cerchio di accuratezza
-            userAccuracyCircle = L.circle([0, 0], {
-                radius: 0,
-                color: 'blue',
-                fillColor: '#3388ff',
-                fillOpacity: 0.2,
-                weight: 1
             }).addTo(map);
             
             // Configura gli eventi per la rotazione e il trascinamento
@@ -385,11 +376,11 @@
                 } else if (!gpsEnabled && !controlPressed && e.button === 0) {
                     // Modalità trascinamento
                     isDragging = true;
-                    const point = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
                     dragStartPoint = {
                         clientX: e.clientX,
                         clientY: e.clientY,
-                        latLng: point
+                        center: map.getCenter(),
+                        zoom: map.getZoom()
                     };
                     mapContainer.style.cursor = 'grabbing';
                     e.preventDefault();
@@ -411,21 +402,25 @@
                     e.preventDefault();
                     e.stopPropagation();
                 } else if (isDragging && !gpsEnabled) {
-                    // Trascinamento della mappa - il punto sotto il mouse rimane sotto il mouse
+                    // Trascinamento della mappa - sempre orizzontale e verticale rispetto alla pagina
                     if (dragStartPoint) {
-                        const currentPoint = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
-                        const latDelta = dragStartPoint.latLng.lat - currentPoint.lat;
-                        const lngDelta = dragStartPoint.latLng.lng - currentPoint.lng;
+                        const deltaX = e.clientX - dragStartPoint.clientX;
+                        const deltaY = e.clientY - dragStartPoint.clientY;
                         
-                        const newCenter = L.latLng(
-                            map.getCenter().lat + latDelta,
-                            map.getCenter().lng + lngDelta
-                        );
+                        // Ruota il vettore di spostamento per compensare la rotazione della mappa
+                        const angle = -currentRotation * Math.PI / 180;
+                        const cos = Math.cos(angle);
+                        const sin = Math.sin(angle);
+                        
+                        const rotatedDeltaX = deltaX * cos - deltaY * sin;
+                        const rotatedDeltaY = deltaX * sin + deltaY * cos;
+                        
+                        // Calcola il nuovo centro in coordinate mondo
+                        const worldCenter = map.project(dragStartPoint.center, dragStartPoint.zoom);
+                        const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
+                        const newCenter = map.unproject(newWorldCenter, dragStartPoint.zoom);
                         
                         map.setView(newCenter, map.getZoom(), { animate: false });
-                        
-                        // Aggiorna il punto di inizio per il prossimo movimento
-                        dragStartPoint.latLng = map.containerPointToLatLng(map.mouseEventToContainerPoint(e));
                     }
                     e.preventDefault();
                     e.stopPropagation();
@@ -479,14 +474,11 @@
                         // Trascinamento con un dito
                         isTouchDragging = true;
                         const touch = e.touches[0];
-                        const point = map.containerPointToLatLng(map.mouseEventToContainerPoint({
-                            clientX: touch.clientX,
-                            clientY: touch.clientY
-                        }));
                         touchStartPoint = {
                             clientX: touch.clientX,
                             clientY: touch.clientY,
-                            latLng: point
+                            center: map.getCenter(),
+                            zoom: map.getZoom()
                         };
                         e.preventDefault();
                     }
@@ -515,25 +507,23 @@
                     } else if (isTouchDragging && e.touches.length === 1) {
                         const touch = e.touches[0];
                         if (touchStartPoint) {
-                            const currentPoint = map.containerPointToLatLng(map.mouseEventToContainerPoint({
-                                clientX: touch.clientX,
-                                clientY: touch.clientY
-                            }));
-                            const latDelta = touchStartPoint.latLng.lat - currentPoint.lat;
-                            const lngDelta = touchStartPoint.latLng.lng - currentPoint.lng;
+                            const deltaX = touch.clientX - touchStartPoint.clientX;
+                            const deltaY = touch.clientY - touchStartPoint.clientY;
                             
-                            const newCenter = L.latLng(
-                                map.getCenter().lat + latDelta,
-                                map.getCenter().lng + lngDelta
-                            );
+                            // Ruota il vettore di spostamento per compensare la rotazione della mappa
+                            const angle = -currentRotation * Math.PI / 180;
+                            const cos = Math.cos(angle);
+                            const sin = Math.sin(angle);
+                            
+                            const rotatedDeltaX = deltaX * cos - deltaY * sin;
+                            const rotatedDeltaY = deltaX * sin + deltaY * cos;
+                            
+                            // Calcola il nuovo centro in coordinate mondo
+                            const worldCenter = map.project(touchStartPoint.center, touchStartPoint.zoom);
+                            const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
+                            const newCenter = map.unproject(newWorldCenter, touchStartPoint.zoom);
                             
                             map.setView(newCenter, map.getZoom(), { animate: false });
-                            
-                            // Aggiorna il punto di inizio per il prossimo movimento
-                            touchStartPoint.latLng = map.containerPointToLatLng(map.mouseEventToContainerPoint({
-                                clientX: touch.clientX,
-                                clientY: touch.clientY
-                            }));
                         }
                         e.preventDefault();
                     }
@@ -668,14 +658,9 @@
         function updatePosition(position) {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
-            const accuracy = position.coords.accuracy;
             
             // Aggiorna la posizione del marker
             userMarker.setLatLng([lat, lng]);
-            
-            // Aggiorna il cerchio di accuratezza
-            userAccuracyCircle.setLatLng([lat, lng]);
-            userAccuracyCircle.setRadius(accuracy);
             
             // Se il GPS è attivo, centra e ruota la mappa
             if (gpsEnabled) {
@@ -787,7 +772,7 @@
             // Gestione del pulsante Submit
             document.getElementById('submit').addEventListener('click', function() {
                 addTriangle();
-            });
+            }); 
             
             // Gestione del pulsante Disable GPS
             document.getElementById('disableGPS').addEventListener('click', function() {
