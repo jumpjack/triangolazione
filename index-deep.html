@@ -384,6 +384,7 @@
         let controlPressed = false;
         let rotationStartAngle = 0;
         let dragStartPoint = null;
+        let previousRotation = 0;
         
         // Variabili per i slider
         let baseWidth = 500; // metri (larghezza base)
@@ -456,6 +457,7 @@
                     // Modalità rotazione
                     isRotating = true;
                     rotationStartAngle = calculateAngleFromCenter(e.clientX, e.clientY);
+                    previousRotation = currentRotation;
                     mapContainer.style.cursor = 'grabbing';
                     e.preventDefault();
                     e.stopPropagation();
@@ -478,13 +480,24 @@
                 if (isRotating && controlPressed && !gpsEnabled) {
                     // Rotazione della mappa basata sull'angolo del mouse
                     const currentAngle = calculateAngleFromCenter(e.clientX, e.clientY);
-                    const angleDelta = currentAngle - rotationStartAngle;
                     
-                    currentRotation = (currentRotation + angleDelta) % 360;
-                    if (currentRotation < 0) currentRotation += 360;
+                    // Calcola la differenza di angolo tenendo conto del passaggio attraverso 0°/360°
+                    let angleDelta = currentAngle - rotationStartAngle;
                     
-                    applyMapRotation();
-                    rotationStartAngle = currentAngle;
+                    // Gestisce il caso in cui l'angolo passa attraverso 0°/360°
+                    if (angleDelta > 180) {
+                        angleDelta -= 360;
+                    } else if (angleDelta < -180) {
+                        angleDelta += 360;
+                    }
+                    
+                    // Aggiorna la rotazione
+                    currentRotation = previousRotation + angleDelta;
+                    
+                    // Normalizza la rotazione tra 0 e 360 per la visualizzazione
+                    const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+                    
+                    applyMapRotation(normalizedRotation);
                     e.preventDefault();
                     e.stopPropagation();
                 } else if (isDragging && !gpsEnabled) {
@@ -537,6 +550,7 @@
             let isTouchRotating = false;
             let isTouchDragging = false;
             let touchStartPoint = null;
+            let touchPreviousRotation = 0;
             
             mapContainer.addEventListener('touchstart', function(e) {
                 if (!gpsEnabled) {
@@ -555,6 +569,7 @@
                             touch2.clientX - touch1.clientX
                         ) * 180 / Math.PI;
                         
+                        touchPreviousRotation = currentRotation;
                         e.preventDefault();
                     } else if (e.touches.length === 1) {
                         // Trascinamento con un dito
@@ -582,13 +597,23 @@
                             touch2.clientX - touch1.clientX
                         ) * 180 / Math.PI;
                         
-                        const angleDelta = currentAngle - touchStartAngle;
-                        currentRotation = (currentRotation + angleDelta) % 360;
-                        if (currentRotation < 0) currentRotation += 360;
+                        // Calcola la differenza di angolo tenendo conto del passaggio attraverso 0°/360°
+                        let angleDelta = currentAngle - touchStartAngle;
                         
-                        applyMapRotation();
-                        touchStartAngle = currentAngle;
+                        // Gestisce il caso in cui l'angolo passa attraverso 0°/360°
+                        if (angleDelta > 180) {
+                            angleDelta -= 360;
+                        } else if (angleDelta < -180) {
+                            angleDelta += 360;
+                        }
                         
+                        // Aggiorna la rotazione
+                        currentRotation = touchPreviousRotation + angleDelta;
+                        
+                        // Normalizza la rotazione tra 0 e 360 per la visualizzazione
+                        const normalizedRotation = ((currentRotation % 360) + 360) % 360;
+                        
+                        applyMapRotation(normalizedRotation);
                         e.preventDefault();
                     } else if (isTouchDragging && e.touches.length === 1) {
                         const touch = e.touches[0];
@@ -687,22 +712,27 @@
         }
         
         // Applica la rotazione alla mappa
-        function applyMapRotation() {
+        function applyMapRotation(rotation = currentRotation) {
             const mapContainer = map.getContainer();
-            mapContainer.style.transform = `rotate(${currentRotation}deg)`;
-            updateCompass();
+            // Usa sempre la rotazione normalizzata per la visualizzazione
+            const normalizedRotation = ((rotation % 360) + 360) % 360;
+            mapContainer.style.transform = `rotate(${normalizedRotation}deg)`;
+            updateCompass(normalizedRotation);
         }
         
         // Aggiorna la bussola grafica
-        function updateCompass() {
+        function updateCompass(rotation = currentRotation) {
             const compassRose = document.getElementById('compassRose');
             const compassDirection = document.getElementById('compassDirection');
             
+            // Usa sempre la rotazione normalizzata per la visualizzazione
+            const normalizedRotation = ((rotation % 360) + 360) % 360;
+            
             // Ruota la bussola per mostrare l'orientamento
-            compassRose.style.transform = `rotate(${currentRotation}deg)`;
+            compassRose.style.transform = `rotate(${normalizedRotation}deg)`;
             
             // Mostra la direzione in gradi
-            compassDirection.textContent = Math.round(currentRotation) + '°';
+            compassDirection.textContent = Math.round(normalizedRotation) + '°';
         }
         
         // Resetta la rotazione
