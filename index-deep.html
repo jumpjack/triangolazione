@@ -364,7 +364,7 @@
         
         <div class="help-text">CTRL + Trascina per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 2.2</div>
+        <div class="build-info" id="buildInfo">Build: 2.3</div>
     </div>
     
     <!-- Bussola grafica -->
@@ -381,7 +381,7 @@
     
     <script>
         // Numero di build - incrementa ad ogni aggiornamento
-        const BUILD_NUMBER = "2.2";
+        const BUILD_NUMBER = "2.3";
         
         // Variabili globali
         let map;
@@ -511,7 +511,7 @@
                     // Normalizza la rotazione tra 0 e 360 per la visualizzazione
                     const normalizedRotation = ((currentRotation % 360) + 360) % 360;
                     
-                    applyMapRotation(normalizedRotation);
+                    applyMapRotation(currentRotation);
                     e.preventDefault();
                     e.stopPropagation();
                 } else if (isDragging && !gpsEnabled) {
