@@ -364,7 +364,7 @@
         
         <div class="help-text">CTRL + Trascina per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 2.3</div>
+        <div class="build-info" id="buildInfo">Build: 2.4</div>
     </div>
     
     <!-- Bussola grafica -->
@@ -381,7 +381,7 @@
     
     <script>
         // Numero di build - incrementa ad ogni aggiornamento
-        const BUILD_NUMBER = "2.3";
+        const BUILD_NUMBER = "2.4";
         
         // Variabili globali
         let map;
@@ -498,13 +498,7 @@
                     // Calcola la differenza di angolo
                     let angleDelta = currentAngle - rotationStartAngle;
                     
-                    // Gestisce il passaggio attraverso 0°/360° in modo fluido
-                    if (angleDelta > 180) {
-                        angleDelta -= 360;
-                    } else if (angleDelta < -180) {
-                        angleDelta += 360;
-                    }
-                    
+
                     // Aggiorna la rotazione
                     currentRotation = previousRotation + angleDelta;
                     
