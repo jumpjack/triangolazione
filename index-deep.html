@@ -627,7 +627,7 @@
                         // Normalizza la rotazione tra 0 e 360 per la visualizzazione
                         const normalizedRotation = ((currentRotation % 360) + 360) % 360;
                         
-                        applyMapRotation(normalizedRotation);
+                        applyMapRotation(currentRotation);
                         e.preventDefault();
                     } else if (isTouchDragging && e.touches.length === 1) {
                         const touch = e.touches[0];
