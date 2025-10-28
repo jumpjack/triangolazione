@@ -67,6 +67,22 @@
             background-color: #0b7dda;
         }
         
+        #undo {
+            background-color: #FF9800;
+        }
+        
+        #undo:hover {
+            background-color: #e68900;
+        }
+        
+        #clear {
+            background-color: #795548;
+        }
+        
+        #clear:hover {
+            background-color: #6d4c41;
+        }
+        
         .status {
             margin-top: 10px;
             font-size: 12px;
@@ -235,6 +251,71 @@
             margin-top: 5px;
             font-style: italic;
         }
+        
+        /* Stili per i pulsanti di azione */
+        .action-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        .action-buttons button {
+            flex: 1;
+            margin: 5px 0;
+        }
+        
+        /* Overlay di conferma */
+        .confirm-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 2000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        
+        .confirm-dialog {
+            background: white;
+            padding: 20px;
+            border-radius: 5px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            text-align: center;
+            max-width: 300px;
+        }
+        
+        .confirm-dialog p {
+            margin: 0 0 20px 0;
+        }
+        
+        .confirm-buttons {
+            display: flex;
+            gap: 10px;
+            justify-content: center;
+        }
+        
+        .confirm-buttons button {
+            flex: 1;
+            margin: 0;
+        }
+        
+        .confirm-yes {
+            background-color: #f44336;
+        }
+        
+        .confirm-yes:hover {
+            background-color: #d32f2f;
+        }
+        
+        .confirm-no {
+            background-color: #9e9e9e;
+        }
+        
+        .confirm-no:hover {
+            background-color: #757575;
+        }
     </style>
 </head>
 <body>
@@ -250,6 +331,11 @@
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
         <button id="resetRotation">Reset Rotazione</button>
+        
+        <div class="action-buttons">
+            <button id="undo">UNDO</button>
+            <button id="clear">CLEAR</button>
+        </div>
         
         <div class="sliders-title">Regola Triangolo</div>
         
@@ -625,6 +711,94 @@
             applyMapRotation();
         }
         
+        // Rimuove l'ultimo triangolo
+        function undoLastTriangle() {
+            if (triangles.length === 0) {
+                alert("Non ci sono triangoli da rimuovere.");
+                return;
+            }
+            
+            showConfirmDialog(
+                "Vuoi davvero rimuovere l'ultimo triangolo?",
+                function() {
+                    // Rimuovi l'ultimo triangolo dalla mappa
+                    const lastTriangle = triangles.pop();
+                    const lastTriangleData = triangleData.pop();
+                    
+                    if (lastTriangle) {
+                        map.removeLayer(lastTriangle);
+                    }
+                    
+                    updateStatus(`Rimosso ultimo triangolo. Rimangono: ${triangles.length}`);
+                }
+            );
+        }
+        
+        // Rimuove tutti i triangoli
+        function clearAllTriangles() {
+            if (triangles.length === 0) {
+                alert("Non ci sono triangoli da rimuovere.");
+                return;
+            }
+            
+            showConfirmDialog(
+                "Vuoi davvero rimuovere tutti i triangoli?",
+                function() {
+                    // Rimuovi tutti i triangoli dalla mappa
+                    triangles.forEach(triangle => {
+                        map.removeLayer(triangle);
+                    });
+                    
+                    triangles = [];
+                    triangleData = [];
+                    
+                    updateStatus("Tutti i triangoli sono stati rimossi.");
+                }
+            );
+        }
+        
+        // Mostra un dialog di conferma
+        function showConfirmDialog(message, onConfirm) {
+            // Crea l'overlay
+            const overlay = document.createElement('div');
+            overlay.className = 'confirm-overlay';
+            
+            // Crea il dialog
+            const dialog = document.createElement('div');
+            dialog.className = 'confirm-dialog';
+            
+            // Crea il messaggio
+            const messageEl = document.createElement('p');
+            messageEl.textContent = message;
+            dialog.appendChild(messageEl);
+            
+            // Crea i pulsanti
+            const buttons = document.createElement('div');
+            buttons.className = 'confirm-buttons';
+            
+            const yesButton = document.createElement('button');
+            yesButton.textContent = 'Sì';
+            yesButton.className = 'confirm-yes';
+            yesButton.onclick = function() {
+                document.body.removeChild(overlay);
+                onConfirm();
+            };
+            
+            const noButton = document.createElement('button');
+            noButton.textContent = 'No';
+            noButton.className = 'confirm-no';
+            noButton.onclick = function() {
+                document.body.removeChild(overlay);
+            };
+            
+            buttons.appendChild(yesButton);
+            buttons.appendChild(noButton);
+            dialog.appendChild(buttons);
+            
+            overlay.appendChild(dialog);
+            document.body.appendChild(overlay);
+        }
+        
         // Avvia il tracciamento GPS
         function startGPS() {
             if (navigator.geolocation) {
@@ -742,6 +916,7 @@
             }
             
             createTriangle(observerPoint, currentRotation);
+            updateStatus(`Triangolo aggiunto. Totale: ${triangles.length}`);
         }
         
         // Calcola un punto di destinazione date coordinate, direzione e distanza
@@ -790,6 +965,12 @@
             
             // Gestione del pulsante Reset Rotazione
             document.getElementById('resetRotation').addEventListener('click', resetRotation);
+            
+            // Gestione del pulsante UNDO
+            document.getElementById('undo').addEventListener('click', undoLastTriangle);
+            
+            // Gestione del pulsante CLEAR
+            document.getElementById('clear').addEventListener('click', clearAllTriangles);
         });
     </script>
 </body>
