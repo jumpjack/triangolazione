@@ -792,7 +792,7 @@
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
-                    deviceOrientationAlpha =  Math.PI  - alpha;
+                    deviceOrientationAlpha =  270  - alpha;
 
                     // CORREZIONE PRINCIPALE: 
                     // Per avere la modalità navigazione come Google Maps:
@@ -927,7 +927,7 @@
                 difference = 360 - difference;
             }
             
-            deviceOrientationValue.textContent = deviceDegrees + '°v3';
+            deviceOrientationValue.textContent = deviceDegrees + '°v4';
             mapOrientationValue.textContent = mapDegrees + '°';
             orientationDifferenceValue.textContent = difference + '°';
         }
