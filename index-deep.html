@@ -799,7 +799,7 @@
                     // Quando il telefono punta a nord (alpha=0), la mappa deve avere rotazione 0 (nord in alto)
                     // Quando il telefono punta a est (alpha=90), la mappa deve avere rotazione -90° (est in alto)
                     // Quindi: rotazione mappa = -alpha
-                    currentRotation = -alpha * Math.PI / 180;
+                    currentRotation = alpha * Math.PI / 180;
                     applyMapRotation();
                     updateOrientationInfo();
                 }
