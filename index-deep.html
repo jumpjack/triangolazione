@@ -2,97 +2,122 @@
 <html lang="it">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Triangolazione GPS con OpenLayers</title>
     
     <!-- OpenLayers CSS -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
     
     <style>
+        * {
+            box-sizing: border-box;
+        }
+        
         body {
             margin: 0;
             padding: 0;
             font-family: Arial, sans-serif;
             overflow: hidden;
+            touch-action: none;
+            -webkit-touch-callout: none;
+            -webkit-user-select: none;
+            -khtml-user-select: none;
+            -moz-user-select: none;
+            -ms-user-select: none;
+            user-select: none;
         }
         
         #map {
             width: 100%;
-            height: 100vh;
+            height: 50vh;
             position: relative;
         }
         
         .controls {
             position: absolute;
-            top: 10px;
-            right: 10px;
+            bottom: 0;
+            left: 0;
+            right: 0;
             z-index: 1000;
             background: white;
-            padding: 15px;
-            border-radius: 5px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
-            width: 250px;
+            padding: 10px;
+            box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
+            display: none;
+            max-height: 50vh;
+            overflow-y: auto;
+        }
+        
+        .mobile-controls {
+            display: flex;
+            flex-direction: column;
+            height: 50vh;
+            padding: 5px;
+            background: #f5f5f5;
+        }
+        
+        .control-row {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 5px;
+            flex: 1;
+        }
+        
+        .control-group {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
         }
         
         button {
-            display: block;
-            margin: 10px 0;
-            padding: 8px 12px;
-            width: 100%;
+            flex: 1;
+            min-height: 44px;
+            padding: 8px 4px;
             background-color: #4CAF50;
             color: white;
             border: none;
-            border-radius: 4px;
+            border-radius: 8px;
             cursor: pointer;
+            font-size: 12px;
+            font-weight: bold;
+            touch-action: manipulation;
         }
         
-        button:hover {
-            background-color: #45a049;
+        button:active {
+            transform: scale(0.95);
         }
         
         #disableGPS {
             background-color: #f44336;
         }
         
-        #disableGPS:hover {
-            background-color: #d32f2f;
-        }
-        
         #resetRotation {
             background-color: #2196F3;
-        }
-        
-        #resetRotation:hover {
-            background-color: #0b7dda;
         }
         
         #undo {
             background-color: #FF9800;
         }
         
-        #undo:hover {
-            background-color: #e68900;
-        }
-        
         #clear {
             background-color: #795548;
         }
         
-        #clear:hover {
-            background-color: #6d4c41;
-        }
-        
         .status {
-            margin-top: 10px;
-            font-size: 12px;
+            margin-top: 5px;
+            font-size: 11px;
             text-align: center;
+            color: #666;
+            padding: 2px;
+            background: #fff;
+            border-radius: 4px;
+            border: 1px solid #ddd;
         }
         
         .build-info {
-            margin-top: 5px;
-            font-size: 10px;
+            font-size: 9px;
             color: #888;
             text-align: center;
+            margin-top: 2px;
         }
         
         /* Indicatore centrale */
@@ -106,9 +131,9 @@
         }
         
         .center-crosshair {
-            width: 30px;
-            height: 30px;
-            border: 3px solid red;
+            width: 20px;
+            height: 20px;
+            border: 2px solid red;
             border-radius: 50%;
             background: transparent;
             position: relative;
@@ -123,14 +148,14 @@
         
         .center-crosshair::before {
             width: 2px;
-            height: 40px;
+            height: 30px;
             top: -5px;
             left: 50%;
             transform: translateX(-50%);
         }
         
         .center-crosshair::after {
-            width: 40px;
+            width: 30px;
             height: 2px;
             top: 50%;
             left: -5px;
@@ -140,22 +165,22 @@
         /* Bussola grafica */
         .compass-graphic {
             position: absolute;
-            top: 80px;
-            right: 20px;
+            top: 10px;
+            right: 10px;
             z-index: 1000;
             background: white;
-            width: 80px;
-            height: 80px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
         .compass-rose {
-            width: 70px;
-            height: 70px;
+            width: 40px;
+            height: 40px;
             border-radius: 50%;
             position: relative;
             transition: transform 0.2s ease;
@@ -163,12 +188,12 @@
         
         .compass-north {
             position: absolute;
-            top: 5px;
+            top: 2px;
             left: 50%;
             transform: translateX(-50%);
             color: red;
             font-weight: bold;
-            font-size: 14px;
+            font-size: 10px;
         }
         
         .compass-needle {
@@ -176,31 +201,35 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 4px;
-            height: 60px;
+            width: 3px;
+            height: 35px;
             background: red;
             border-radius: 2px;
         }
         
         .compass-direction {
             position: absolute;
-            bottom: 5px;
+            bottom: 2px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 10px;
+            font-size: 8px;
             color: #333;
         }
         
         /* Stili per gli slider */
         .slider-container {
-            margin: 15px 0;
+            margin: 5px 0;
+            background: white;
+            padding: 8px;
+            border-radius: 8px;
+            border: 1px solid #ddd;
         }
         
         .slider-label {
             display: flex;
             justify-content: space-between;
-            margin-bottom: 5px;
-            font-size: 12px;
+            margin-bottom: 3px;
+            font-size: 11px;
             color: #333;
         }
         
@@ -214,59 +243,103 @@
         
         .slider {
             width: 100%;
-            height: 6px;
-            border-radius: 3px;
+            height: 20px;
+            border-radius: 10px;
             background: #ddd;
             outline: none;
             -webkit-appearance: none;
+            touch-action: manipulation;
         }
         
         .slider::-webkit-slider-thumb {
             -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
             background: #4CAF50;
             cursor: pointer;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
         
         .slider::-moz-range-thumb {
-            width: 16px;
-            height: 16px;
+            width: 24px;
+            height: 24px;
             border-radius: 50%;
             background: #4CAF50;
             cursor: pointer;
-            border: none;
+            border: 2px solid white;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
         }
         
         .sliders-title {
-            margin-top: 15px;
-            margin-bottom: 10px;
-            font-size: 14px;
+            margin: 8px 0 5px 0;
+            font-size: 12px;
             font-weight: bold;
             color: #333;
             text-align: center;
             border-top: 1px solid #eee;
-            padding-top: 10px;
+            padding-top: 5px;
         }
         
         .help-text {
-            font-size: 11px;
+            font-size: 10px;
             color: #666;
             text-align: center;
-            margin-top: 5px;
+            margin-top: 3px;
             font-style: italic;
+            padding: 3px;
+            background: #e9f7e9;
+            border-radius: 4px;
         }
         
-        /* Stili per i pulsanti di azione */
-        .action-buttons {
-            display: flex;
-            gap: 10px;
-        }
-        
-        .action-buttons button {
-            flex: 1;
-            margin: 5px 0;
+        /* Desktop styles */
+        @media (min-width: 768px) {
+            #map {
+                height: 100vh;
+            }
+            
+            .controls {
+                display: block;
+                top: 10px;
+                right: 10px;
+                bottom: auto;
+                left: auto;
+                width: 250px;
+                max-height: none;
+                overflow: visible;
+            }
+            
+            .mobile-controls {
+                display: none;
+            }
+            
+            button {
+                min-height: auto;
+                padding: 8px 12px;
+                font-size: 14px;
+            }
+            
+            .compass-graphic {
+                width: 80px;
+                height: 80px;
+                top: 80px;
+            }
+            
+            .compass-rose {
+                width: 70px;
+                height: 70px;
+            }
+            
+            .compass-north {
+                font-size: 14px;
+                top: 5px;
+            }
+            
+            .compass-direction {
+                font-size: 10px;
+                bottom: 5px;
+            }
         }
         
         /* Overlay di conferma */
@@ -276,24 +349,27 @@
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0,0,0,0.5);
+            background: rgba(0,0,0,0.7);
             z-index: 2000;
             display: flex;
             align-items: center;
             justify-content: center;
+            padding: 20px;
         }
         
         .confirm-dialog {
             background: white;
             padding: 20px;
-            border-radius: 5px;
-            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
             text-align: center;
             max-width: 300px;
+            width: 100%;
         }
         
         .confirm-dialog p {
             margin: 0 0 20px 0;
+            font-size: 16px;
         }
         
         .confirm-buttons {
@@ -305,27 +381,49 @@
         .confirm-buttons button {
             flex: 1;
             margin: 0;
+            min-height: 44px;
+            font-size: 16px;
         }
         
         .confirm-yes {
             background-color: #f44336;
         }
         
-        .confirm-yes:hover {
-            background-color: #d32f2f;
-        }
-        
         .confirm-no {
             background-color: #9e9e9e;
         }
         
-        .confirm-no:hover {
-            background-color: #757575;
+        /* Pulsante toggle per mobile */
+        .mobile-toggle {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 1001;
+            background: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            font-size: 20px;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.3);
         }
         
-        /* Stile per i triangoli */
-        .triangle-layer {
-            z-index: 100;
+        @media (max-width: 767px) {
+            .mobile-toggle {
+                display: flex;
+            }
+            
+            .controls-mobile {
+                display: none;
+            }
+            
+            .controls-mobile.show {
+                display: block;
+            }
         }
     </style>
 </head>
@@ -337,6 +435,7 @@
         <div class="center-crosshair"></div>
     </div>
     
+    <!-- Controlli desktop -->
     <div class="controls">
         <button id="submit">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
@@ -368,8 +467,61 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 4.0 (OpenLayers)</div>
+        <div class="build-info" id="buildInfo">Build: 5.0 (Mobile Ready)</div>
     </div>
+    
+    <!-- Controlli mobile -->
+    <div class="controls-mobile" id="mobileControls">
+        <div class="mobile-controls">
+            <!-- Prima riga: pulsanti principali -->
+            <div class="control-row">
+                <div class="control-group">
+                    <button id="submitMobile">Aggiungi Triangolo</button>
+                </div>
+                <div class="control-group">
+                    <button id="disableGPSMobile">DISABLE GPS</button>
+                    <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
+                </div>
+            </div>
+            
+            <!-- Seconda riga: azioni -->
+            <div class="control-row">
+                <div class="control-group">
+                    <button id="resetRotationMobile">Reset Rotazione</button>
+                </div>
+                <div class="control-group">
+                    <button id="undoMobile">UNDO</button>
+                </div>
+                <div class="control-group">
+                    <button id="clearMobile">CLEAR</button>
+                </div>
+            </div>
+            
+            <!-- Terza riga: slider -->
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span class="slider-name">Larghezza Base</span>
+                    <span class="slider-value" id="baseWidthValueMobile">500 m</span>
+                </div>
+                <input type="range" min="100" max="2000" value="500" class="slider" id="baseWidthSliderMobile">
+            </div>
+            
+            <div class="slider-container">
+                <div class="slider-label">
+                    <span class="slider-name">Altezza</span>
+                    <span class="slider-value" id="baseDistanceValueMobile">1000 m</span>
+                </div>
+                <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSliderMobile">
+            </div>
+            
+            <!-- Status -->
+            <div class="status" id="statusMobile">GPS attivo - Muovi il dispositivo</div>
+            <div class="build-info" id="buildInfoMobile">Build: 5.0 (Mobile Ready)</div>
+        </div>
+    </div>
+    
+    <!-- Pulsante toggle per mobile -->
+    <button class="mobile-toggle" id="mobileToggle">☰</button>
     
     <!-- Bussola grafica -->
     <div class="compass-graphic">
@@ -384,8 +536,8 @@
     <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
     
     <script>
-        // Numero di build - incrementa ad ogni aggiornamento
-        const BUILD_NUMBER = "4.0 (OpenLayers)";
+        // Numero di build
+        const BUILD_NUMBER = "5.0 (Mobile Ready)";
         
         // Variabili globali
         let map;
@@ -399,17 +551,21 @@
         let controlPressed = false;
         let rotationStartX = 0;
         let previousRotation = 0;
+        let deviceOrientationHandler = null;
         
         // Variabili per i slider
-        let baseWidth = 500; // metri (larghezza base)
-        let baseDistance = 1000; // metri (altezza/distanza)
+        let baseWidth = 500;
+        let baseDistance = 1000;
         
-        // Struttura per memorizzare i triangoli con le loro informazioni
+        // Struttura per memorizzare i triangoli
         let triangleData = [];
         
         // Layer per i triangoli
         let triangleLayer;
         let triangleSource;
+        
+        // Rileva se è mobile
+        const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
         // Inizializzazione della mappa
         function initMap() {
@@ -470,140 +626,177 @@
             });
             map.addLayer(userMarkerLayer);
             
-            // Configura gli eventi per la rotazione e il trascinamento
+            // Configura gli eventi
             setupMapEvents();
-            
-            // Configura gli slider
             setupSliders();
             
             // Mostra il numero di build
             document.getElementById('buildInfo').textContent = "Build: " + BUILD_NUMBER;
+            document.getElementById('buildInfoMobile').textContent = "Build: " + BUILD_NUMBER;
             
             // Applica la rotazione iniziale
             applyMapRotation();
             
             // Avvia il tracciamento GPS
             startGPS();
+            
+            // Setup per mobile
+            if (isMobile) {
+                setupMobileFeatures();
+            }
+        }
+        
+        // Setup per funzionalità mobile
+        function setupMobileFeatures() {
+            // Attiva l'orientamento del dispositivo
+            if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+                // iOS 13+ - richiedi permesso
+                document.getElementById('statusMobile').textContent = "Tocca per abilitare l'orientamento";
+                
+                const enableOrientation = () => {
+                    DeviceOrientationEvent.requestPermission()
+                        .then(permissionState => {
+                            if (permissionState === 'granted') {
+                                startDeviceOrientation();
+                                document.getElementById('statusMobile').textContent = "GPS attivo - Orientamento abilitato";
+                            }
+                        })
+                        .catch(console.error);
+                };
+                
+                // Aggiungi event listener per il primo tap
+                const onceTap = () => {
+                    enableOrientation();
+                    document.removeEventListener('click', onceTap);
+                    document.removeEventListener('touchstart', onceTap);
+                };
+                
+                document.addEventListener('click', onceTap);
+                document.addEventListener('touchstart', onceTap);
+            } else {
+                // Altri browser - avvia direttamente
+                startDeviceOrientation();
+            }
+            
+            // Setup toggle per controlli mobile
+            document.getElementById('mobileToggle').addEventListener('click', function() {
+                const mobileControls = document.getElementById('mobileControls');
+                mobileControls.classList.toggle('show');
+                this.textContent = mobileControls.classList.contains('show') ? '✕' : '☰';
+            });
+        }
+        
+        // Avvia il tracking dell'orientamento del dispositivo
+        function startDeviceOrientation() {
+            deviceOrientationHandler = (event) => {
+                if (!gpsEnabled) return;
+                
+                // Ottieni l'orientamento dal dispositivo
+                let alpha = event.alpha; // 0-360 gradi, bussola
+                
+                if (alpha !== null) {
+                    // Converti in radianti e applica
+                    currentRotation = -alpha * Math.PI / 180;
+                    applyMapRotation();
+                }
+            };
+            
+            window.addEventListener('deviceorientation', deviceOrientationHandler);
         }
         
         // Configura gli eventi della mappa
         function setupMapEvents() {
             const mapContainer = map.getTargetElement();
             
-            // Eventi per il tasto Control
-            document.addEventListener('keydown', function(e) {
-                if (e.key === 'Control' && !gpsEnabled) {
-                    controlPressed = true;
-                    mapContainer.style.cursor = 'grab';
-                    e.preventDefault();
-                }
-            });
-            
-            document.addEventListener('keyup', function(e) {
-                if (e.key === 'Control') {
-                    controlPressed = false;
-                    isRotating = false;
-                    mapContainer.style.cursor = '';
-                }
-            });
-            
-            // Mouse events per rotazione
-            mapContainer.addEventListener('mousedown', function(e) {
-                if (controlPressed && !gpsEnabled && e.button === 0) {
-                    // Modalità rotazione - usa solo lo spostamento orizzontale
-                    isRotating = true;
-                    rotationStartX = e.clientX;
-                    previousRotation = currentRotation;
-                    mapContainer.style.cursor = 'grabbing';
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mousemove', function(e) {
-                if (isRotating && controlPressed && !gpsEnabled) {
-                    // Rotazione basata sullo spostamento orizzontale del mouse
-                    const deltaX = e.clientX - rotationStartX;
-                    const rotationDelta = deltaX * 0.005; // Fattore di sensibilità ridotto per OpenLayers
-                    
-                    // Aggiorna la rotazione
-                    currentRotation = previousRotation + rotationDelta;
-                    
-                    // Normalizza la rotazione tra -π e π per OpenLayers
-                    const normalizedRotation = ((currentRotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
-                    if (normalizedRotation > Math.PI) {
-                        currentRotation = normalizedRotation - 2 * Math.PI;
-                    } else {
-                        currentRotation = normalizedRotation;
-                    }
-                    
-                    applyMapRotation();
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            document.addEventListener('mouseup', function(e) {
-                if (isRotating && e.button === 0) {
-                    isRotating = false;
-                    if (controlPressed) {
+            // Eventi per il tasto Control (solo desktop)
+            if (!isMobile) {
+                document.addEventListener('keydown', function(e) {
+                    if (e.key === 'Control' && !gpsEnabled) {
+                        controlPressed = true;
                         mapContainer.style.cursor = 'grab';
+                        e.preventDefault();
                     }
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
+                });
+                
+                document.addEventListener('keyup', function(e) {
+                    if (e.key === 'Control') {
+                        controlPressed = false;
+                        isRotating = false;
+                        mapContainer.style.cursor = '';
+                    }
+                });
+                
+                // Mouse events per rotazione (solo desktop)
+                mapContainer.addEventListener('mousedown', function(e) {
+                    if (controlPressed && !gpsEnabled && e.button === 0) {
+                        isRotating = true;
+                        rotationStartX = e.clientX;
+                        previousRotation = currentRotation;
+                        mapContainer.style.cursor = 'grabbing';
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+                
+                document.addEventListener('mousemove', function(e) {
+                    if (isRotating && controlPressed && !gpsEnabled) {
+                        const deltaX = e.clientX - rotationStartX;
+                        const rotationDelta = deltaX * 0.005;
+                        currentRotation = previousRotation + rotationDelta;
+                        applyMapRotation();
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+                
+                document.addEventListener('mouseup', function(e) {
+                    if (isRotating && e.button === 0) {
+                        isRotating = false;
+                        if (controlPressed) {
+                            mapContainer.style.cursor = 'grab';
+                        }
+                        e.preventDefault();
+                        e.stopPropagation();
+                    }
+                });
+            }
         }
         
         // Configura gli slider
         function setupSliders() {
-            const baseWidthSlider = document.getElementById('baseWidthSlider');
-            const baseDistanceSlider = document.getElementById('baseDistanceSlider');
-            const baseWidthValue = document.getElementById('baseWidthValue');
-            const baseDistanceValue = document.getElementById('baseDistanceValue');
-            
-            // Aggiorna i valori iniziali
-            baseWidthValue.textContent = baseWidth + ' m';
-            baseDistanceValue.textContent = baseDistance + ' m';
-            
-            // Eventi per lo slider della larghezza
-            baseWidthSlider.addEventListener('input', function() {
-                baseWidth = parseInt(this.value);
-                baseWidthValue.textContent = baseWidth + ' m';
-                updateAllTriangles();
-            });
-            
-            baseWidthSlider.addEventListener('change', function() {
-                updateAllTriangles();
-            });
-            
-            // Eventi per lo slider dell'altezza
-            baseDistanceSlider.addEventListener('input', function() {
-                baseDistance = parseInt(this.value);
-                baseDistanceValue.textContent = baseDistance + ' m';
-                updateAllTriangles();
-            });
-            
-            baseDistanceSlider.addEventListener('change', function() {
-                updateAllTriangles();
-            });
+            // Slider desktop
+            setupSliderPair('baseWidthSlider', 'baseWidthValue', 'baseWidthSliderMobile', 'baseWidthValueMobile');
+            setupSliderPair('baseDistanceSlider', 'baseDistanceValue', 'baseDistanceSliderMobile', 'baseDistanceValueMobile');
         }
         
-        // Aggiorna tutti i triangoli esistenti
-        function updateAllTriangles() {
-            // Rimuovi tutti i triangoli dalla mappa
-            triangleSource.clear();
-            triangles = [];
+        function setupSliderPair(desktopSliderId, desktopValueId, mobileSliderId, mobileValueId) {
+            const desktopSlider = document.getElementById(desktopSliderId);
+            const desktopValue = document.getElementById(desktopValueId);
+            const mobileSlider = document.getElementById(mobileSliderId);
+            const mobileValue = document.getElementById(mobileValueId);
             
-            // Ricrea tutti i triangoli con le nuove dimensioni
-            const oldTriangleData = [...triangleData];
-            triangleData = [];
+            function updateValue(value) {
+                if (desktopSliderId === 'baseWidthSlider') baseWidth = value;
+                if (desktopSliderId === 'baseDistanceSlider') baseDistance = value;
+                
+                desktopValue.textContent = value + ' m';
+                if (mobileValue) mobileValue.textContent = value + ' m';
+                updateAllTriangles();
+            }
             
-            oldTriangleData.forEach(data => {
-                createTriangle(data.observerPoint, data.originalRotation);
+            desktopSlider.addEventListener('input', function() {
+                updateValue(parseInt(this.value));
             });
+            
+            if (mobileSlider) {
+                mobileSlider.addEventListener('input', function() {
+                    updateValue(parseInt(this.value));
+                    desktopSlider.value = this.value;
+                });
+            }
         }
         
+        // Funzioni rimanenti (applyMapRotation, updateAllTriangles, resetRotation, undoLastTriangle, clearAllTriangles, showConfirmDialog, startGPS, stopGPS, updatePosition, handleGeolocationError, calculateDestinationPoint, createTriangle, addTriangle, updateStatus) rimangono uguali alla versione precedente...
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             view.setRotation(currentRotation);
@@ -615,15 +808,24 @@
             const compassRose = document.getElementById('compassRose');
             const compassDirection = document.getElementById('compassDirection');
             
-            // Converti da radianti a gradi per la visualizzazione
             const degrees = (currentRotation * 180 / Math.PI) % 360;
             const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
             
-            // Ruota la bussola per mostrare l'orientamento
             compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
-            
-            // Mostra la direzione in gradi
             compassDirection.textContent = Math.round(normalizedDegrees) + '°';
+        }
+        
+        // Aggiorna tutti i triangoli esistenti
+        function updateAllTriangles() {
+            triangleSource.clear();
+            triangles = [];
+            
+            const oldTriangleData = [...triangleData];
+            triangleData = [];
+            
+            oldTriangleData.forEach(data => {
+                createTriangle(data.observerPoint, data.originalRotation);
+            });
         }
         
         // Resetta la rotazione
@@ -642,7 +844,6 @@
             showConfirmDialog(
                 "Vuoi davvero rimuovere l'ultimo triangolo?",
                 function() {
-                    // Rimuovi l'ultimo triangolo dalla mappa
                     const lastTriangle = triangles.pop();
                     const lastTriangleData = triangleData.pop();
                     
@@ -665,7 +866,6 @@
             showConfirmDialog(
                 "Vuoi davvero rimuovere tutti i triangoli?",
                 function() {
-                    // Rimuovi tutti i triangoli dalla mappa
                     triangleSource.clear();
                     triangles = [];
                     triangleData = [];
@@ -677,20 +877,16 @@
         
         // Mostra un dialog di conferma
         function showConfirmDialog(message, onConfirm) {
-            // Crea l'overlay
             const overlay = document.createElement('div');
             overlay.className = 'confirm-overlay';
             
-            // Crea il dialog
             const dialog = document.createElement('div');
             dialog.className = 'confirm-dialog';
             
-            // Crea il messaggio
             const messageEl = document.createElement('p');
             messageEl.textContent = message;
             dialog.appendChild(messageEl);
             
-            // Crea i pulsanti
             const buttons = document.createElement('div');
             buttons.className = 'confirm-buttons';
             
@@ -729,8 +925,14 @@
                         maximumAge: 0
                     }
                 );
-                updateStatus("GPS attivo");
+                updateStatus("GPS attivo" + (isMobile ? " - Muovi il dispositivo" : ""));
                 gpsEnabled = true;
+                
+                // Aggiorna interfaccia
+                document.getElementById('disableGPS').style.display = 'block';
+                document.getElementById('enableGPS').style.display = 'none';
+                document.getElementById('disableGPSMobile').style.display = 'block';
+                document.getElementById('enableGPSMobile').style.display = 'none';
             } else {
                 alert("La geolocalizzazione non è supportata da questo browser.");
             }
@@ -742,8 +944,17 @@
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
             }
+            if (deviceOrientationHandler) {
+                window.removeEventListener('deviceorientation', deviceOrientationHandler);
+            }
             updateStatus("GPS disattivo");
             gpsEnabled = false;
+            
+            // Aggiorna interfaccia
+            document.getElementById('disableGPS').style.display = 'none';
+            document.getElementById('enableGPS').style.display = 'block';
+            document.getElementById('disableGPSMobile').style.display = 'none';
+            document.getElementById('enableGPSMobile').style.display = 'block';
         }
         
         // Aggiorna la posizione dell'utente sulla mappa
@@ -752,16 +963,13 @@
             const lng = position.coords.longitude;
             const coords = ol.proj.fromLonLat([lng, lat]);
             
-            // Aggiorna la posizione del marker
             userMarker.setGeometry(new ol.geom.Point(coords));
             
-            // Se il GPS è attivo, centra e ruota la mappa
             if (gpsEnabled) {
                 view.setCenter(coords);
                 
-                // Ruota la mappa in base all'orientamento
-                if (position.coords.heading !== null) {
-                    currentRotation = -position.coords.heading * Math.PI / 180; // Conversione a radianti e inversione
+                if (position.coords.heading !== null && !isMobile) {
+                    currentRotation = -position.coords.heading * Math.PI / 180;
                     applyMapRotation();
                 }
             }
@@ -788,7 +996,7 @@
         
         // Calcola un punto di destinazione date coordinate, direzione e distanza
         function calculateDestinationPoint(startPoint, bearing, distance) {
-            const R = 6371000; // Raggio della Terra in metri
+            const R = 6371000;
             const lat1 = startPoint[1] * Math.PI / 180;
             const lon1 = startPoint[0] * Math.PI / 180;
             const brng = bearing * Math.PI / 180;
@@ -804,24 +1012,18 @@
         
         // Crea un triangolo
         function createTriangle(observerPoint, originalRotation) {
-            // Converti le coordinate in gradi per il calcolo
             const observerLonLat = ol.proj.toLonLat(observerPoint);
-            
-            // Calcola i vertici del triangolo isoscele
             const directionTowardsTop = (360 - (originalRotation * 180 / Math.PI)) % 360;
             
-            // Vertice dell'osservatore
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
             const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
             const baseRight = calculateDestinationPoint(baseCenter, directionTowardsTop + 90, baseWidth / 2);
             
-            // Converti le coordinate in formato OpenLayers
             const observerCoords = observerPoint;
             const baseCenterCoords = ol.proj.fromLonLat(baseCenter);
             const baseLeftCoords = ol.proj.fromLonLat(baseLeft);
             const baseRightCoords = ol.proj.fromLonLat(baseRight);
             
-            // Crea il poligono triangolare
             const triangle = new ol.Feature({
                 geometry: new ol.geom.Polygon([[
                     observerCoords,
@@ -831,11 +1033,9 @@
                 ]])
             });
             
-            // Aggiungi alla lista dei triangoli
             triangles.push(triangle);
             triangleSource.addFeature(triangle);
             
-            // Salva i dati del triangolo per poterlo ricreare
             triangleData.push({
                 observerPoint: observerPoint,
                 originalRotation: originalRotation
@@ -848,7 +1048,6 @@
         function addTriangle() {
             let observerPoint;
             
-            // Se il GPS è attivo, usa la posizione GPS, altrimenti usa il centro della mappa
             if (gpsEnabled) {
                 observerPoint = userMarker.getGeometry().getCoordinates();
             } else {
@@ -862,39 +1061,28 @@
         // Aggiorna lo stato del GPS
         function updateStatus(message) {
             document.getElementById('status').textContent = message;
+            document.getElementById('statusMobile').textContent = message;
         }
         
         // Inizializza tutto quando la pagina è caricata
         document.addEventListener('DOMContentLoaded', function() {
             initMap();
             
-            // Gestione del pulsante Submit
-            document.getElementById('submit').addEventListener('click', function() {
-                addTriangle();
-            });
-            
-            // Gestione del pulsante Disable GPS
-            document.getElementById('disableGPS').addEventListener('click', function() {
-                stopGPS();
-                document.getElementById('disableGPS').style.display = 'none';
-                document.getElementById('enableGPS').style.display = 'block';
-            });
-            
-            // Gestione del pulsante Enable GPS
-            document.getElementById('enableGPS').addEventListener('click', function() {
-                startGPS();
-                document.getElementById('enableGPS').style.display = 'none';
-                document.getElementById('disableGPS').style.display = 'block';
-            });
-            
-            // Gestione del pulsante Reset Rotazione
+            // Gestione pulsanti desktop
+            document.getElementById('submit').addEventListener('click', addTriangle);
+            document.getElementById('disableGPS').addEventListener('click', stopGPS);
+            document.getElementById('enableGPS').addEventListener('click', startGPS);
             document.getElementById('resetRotation').addEventListener('click', resetRotation);
-            
-            // Gestione del pulsante UNDO
             document.getElementById('undo').addEventListener('click', undoLastTriangle);
-            
-            // Gestione del pulsante CLEAR
             document.getElementById('clear').addEventListener('click', clearAllTriangles);
+            
+            // Gestione pulsanti mobile
+            document.getElementById('submitMobile').addEventListener('click', addTriangle);
+            document.getElementById('disableGPSMobile').addEventListener('click', stopGPS);
+            document.getElementById('enableGPSMobile').addEventListener('click', startGPS);
+            document.getElementById('resetRotationMobile').addEventListener('click', resetRotation);
+            document.getElementById('undoMobile').addEventListener('click', undoLastTriangle);
+            document.getElementById('clearMobile').addEventListener('click', clearAllTriangles);
         });
     </script>
 </body>
