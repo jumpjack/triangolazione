@@ -457,7 +457,8 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <button id="submit">Aggiungi Triangolov2</button>
+        <div class="build-info">Build: 5.6 (Triangoli Fix)</div>
+        <button id="submit">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
         <button id="resetRotation">Reset Rotazione</button>
@@ -487,7 +488,6 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 5.5 (Fixed)</div>
     </div>
     
     <!-- Controlli mobile -->
@@ -496,7 +496,7 @@
             <!-- Prima riga: pulsanti principali -->
             <div class="control-row">
                 <div class="control-group">
-                    <button id="submitMobile">Aggiungi Triangolov2</button>
+                    <button id="submitMobile">Aggiungi Triangolo</button>
                 </div>
                 <div class="control-group">
                     <button id="disableGPSMobile">DISABLE GPS</button>
@@ -534,9 +534,9 @@
                 <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSliderMobile">
             </div>
             
-            <!-- Status -->
+            <!-- Status e Build Info -->
             <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
-            <div class="build-info" id="buildInfoMobile">Build: 5.5 (Fixed)</div>
+            <div class="build-info">Build: 5.6 (Triangoli Fix)</div>
         </div>
     </div>
     
@@ -557,7 +557,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.5 (Fixed)";
+        const BUILD_NUMBER = "5.6 (Triangoli Fix)";
         
         // Variabili globali
         let map;
@@ -650,10 +650,6 @@
             // Configura gli eventi
             setupMapEvents();
             setupSliders();
-            
-            // Mostra il numero di build
-            document.getElementById('buildInfo').textContent = "Build: " + BUILD_NUMBER;
-            document.getElementById('buildInfoMobile').textContent = "Build: " + BUILD_NUMBER;
             
             // Applica la rotazione iniziale
             applyMapRotation();
@@ -848,7 +844,7 @@
             triangleData = [];
             
             oldTriangleData.forEach(data => {
-                createTriangle(data.observerPoint, data.originalRotation);
+                createTriangle(data.observerPoint);
             });
         }
         
@@ -1038,10 +1034,10 @@
         }
         
         // Crea un triangolo
-        function createTriangle(observerPoint, originalRotation) {
+        function createTriangle(observerPoint) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // I triangoli devono essere sempre diretti verso l'alto della pagina (0°)
+            // Il triangolo deve sempre partire dal centro e andare verso l'alto della pagina (0°)
             // indipendentemente dall'orientamento della mappa
             const directionTowardsTop = 0; // Sempre verso l'alto della pagina
             
@@ -1067,8 +1063,7 @@
             triangleSource.addFeature(triangle);
             
             triangleData.push({
-                observerPoint: observerPoint,
-                originalRotation: originalRotation
+                observerPoint: observerPoint
             });
             
             return triangle;
@@ -1084,8 +1079,8 @@
                 observerPoint = view.getCenter();
             }
             
-            // I triangoli devono sempre puntare verso l'alto (0°)
-            createTriangle(observerPoint, 0);
+            // Il triangolo deve sempre partire dal centro e andare verso l'alto
+            createTriangle(observerPoint);
             updateStatus(`Triangolo aggiunto. Totale: ${triangles.length}`);
         }
         
