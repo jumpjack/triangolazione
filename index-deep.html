@@ -162,7 +162,7 @@
             transform: translateY(-50%);
         }
         
-        /* Indicatore di direzione (triangolo) */
+        /* Indicatore di direzione (triangolo fisso) */
         .direction-indicator {
             position: absolute;
             top: 50%;
@@ -451,8 +451,8 @@
         <div class="center-crosshair"></div>
     </div>
     
-    <!-- Indicatore di direzione (triangolo) -->
-    <div class="direction-indicator" id="directionIndicator"></div>
+    <!-- Indicatore di direzione (triangolo fisso) -->
+    <div class="direction-indicator"></div>
     
     <!-- Controlli desktop -->
     <div class="controls">
@@ -486,7 +486,7 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 5.0 (Mobile Ready)</div>
+        <div class="build-info" id="buildInfo">Build: 5.2 (Navigation Mode)</div>
     </div>
     
     <!-- Controlli mobile -->
@@ -534,8 +534,8 @@
             </div>
             
             <!-- Status -->
-            <div class="status" id="statusMobile">GPS attivo - Muovi il dispositivo</div>
-            <div class="build-info" id="buildInfoMobile">Build: 5.0 (Mobile Ready)</div>
+            <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
+            <div class="build-info" id="buildInfoMobile">Build: 5.2 (Navigation Mode)</div>
         </div>
     </div>
     
@@ -556,7 +556,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.1 (Mobile Fixed)";
+        const BUILD_NUMBER = "5.2 (Navigation Mode)";
         
         // Variabili globali
         let map;
@@ -622,17 +622,14 @@
             });
             map.addLayer(triangleLayer);
             
-            // Crea il marker dell'utente
+            // Crea il marker dell'utente (cerchio fisso, non triangolo)
             userMarker = new ol.Feature({
                 geometry: new ol.geom.Point(ol.proj.fromLonLat([0, 0]))
             });
             
-            // Stile del marker con triangolo orientabile
             const userMarkerStyle = new ol.style.Style({
-                image: new ol.style.RegularShape({
-                    points: 3,
-                    radius: 10,
-                    rotation: 0,
+                image: new ol.style.Circle({
+                    radius: 6,
                     fill: new ol.style.Fill({color: 'red'}),
                     stroke: new ol.style.Stroke({color: 'white', width: 2})
                 })
@@ -673,14 +670,14 @@
             // Attiva l'orientamento del dispositivo
             if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
                 // iOS 13+ - richiedi permesso
-                document.getElementById('statusMobile').textContent = "Tocca per abilitare l'orientamento";
+                document.getElementById('statusMobile').textContent = "Tocca per abilitare la modalità navigazione";
                 
                 const enableOrientation = () => {
                     DeviceOrientationEvent.requestPermission()
                         .then(permissionState => {
                             if (permissionState === 'granted') {
                                 startDeviceOrientation();
-                                document.getElementById('statusMobile').textContent = "GPS attivo - Orientamento abilitato";
+                                document.getElementById('statusMobile').textContent = "GPS attivo - Modalità navigazione";
                             }
                         })
                         .catch(console.error);
@@ -713,13 +710,15 @@
             deviceOrientationHandler = (event) => {
                 if (!gpsEnabled) return;
                 
-                // Ottieni l'orientamento dal dispositivo
+                // Ottieni l'orientamento dal dispositivo (bussola)
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
                     // CORREZIONE PRINCIPALE: 
-                    // Inverti la rotazione e converti in radianti
-                    // In OpenLayers, la rotazione positiva è in senso orario, ma vogliamo che la mappa ruoti con il dispositivo
+                    // Per avere la modalità navigazione come Google Maps:
+                    // Quando il telefono punta a nord (alpha=0), la mappa deve avere rotazione 0 (nord in alto)
+                    // Quando il telefono punta a est (alpha=90), la mappa deve avere rotazione -90° (est in alto)
+                    // Quindi: rotazione mappa = -alpha
                     currentRotation = -alpha * Math.PI / 180;
                     applyMapRotation();
                 }
@@ -824,27 +823,6 @@
         function applyMapRotation() {
             view.setRotation(currentRotation);
             updateCompass();
-            updateDirectionIndicator();
-            updateUserMarkerRotation();
-        }
-        
-        // Aggiorna la rotazione del marker dell'utente
-        function updateUserMarkerRotation() {
-            if (userMarker && userMarker.getStyle()) {
-                const style = userMarker.getStyle();
-                const image = style.getImage();
-                if (image && image.setRotation) {
-                    // Il marker triangolare deve puntare nella direzione opposta alla rotazione della mappa
-                    image.setRotation(currentRotation);
-                }
-            }
-        }
-        
-        // Aggiorna l'indicatore di direzione (triangolo)
-        function updateDirectionIndicator() {
-            const directionIndicator = document.getElementById('directionIndicator');
-            const degrees = (currentRotation * 180 / Math.PI) % 360;
-            directionIndicator.style.transform = `translate(-50%, -50%) rotate(${degrees}deg)`;
         }
         
         // Aggiorna la bussola grafica
@@ -970,7 +948,7 @@
                         maximumAge: 0
                     }
                 );
-                updateStatus("GPS attivo" + (isMobile ? " - Muovi il dispositivo" : ""));
+                updateStatus("GPS attivo" + (isMobile ? " - Modalità navigazione" : ""));
                 gpsEnabled = true;
                 
                 // Aggiorna interfaccia
@@ -1013,8 +991,7 @@
             if (gpsEnabled) {
                 view.setCenter(coords);
                 
-                // CORREZIONE: Usa l'heading del GPS solo se disponibile e non su mobile
-                // Su mobile usiamo l'orientamento del dispositivo
+                // Su desktop, usa l'heading del GPS se disponibile
                 if (position.coords.heading !== null && !isMobile) {
                     currentRotation = -position.coords.heading * Math.PI / 180;
                     applyMapRotation();
@@ -1061,7 +1038,7 @@
         function createTriangle(observerPoint, originalRotation) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // CORREZIONE: La direzione verso l'alto della mappa è l'opposto della rotazione
+            // La direzione verso l'alto della mappa è l'opposto della rotazione
             const directionTowardsTop = (360 - (originalRotation * 180 / Math.PI)) % 360;
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
