@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="it">
-<head>
+<head> 
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Triangolazione GPS con OpenLayers</title>
@@ -792,14 +792,14 @@
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
-                    deviceOrientationAlpha = -alpha + Math.PI;
+                    deviceOrientationAlpha = alpha + Math.PI;
                     
                     // CORREZIONE PRINCIPALE: 
                     // Per avere la modalità navigazione come Google Maps:
                     // Quando il telefono punta a nord (alpha=0), la mappa deve avere rotazione 0 (nord in alto)
                     // Quando il telefono punta a est (alpha=90), la mappa deve avere rotazione -90° (est in alto)
                     // Quindi: rotazione mappa = -alpha
-                    currentRotation = alpha * Math.PI / 180;
+                    currentRotation = -alpha * Math.PI / 180;
                     applyMapRotation();
                     updateOrientationInfo();
                 }
