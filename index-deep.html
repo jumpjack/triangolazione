@@ -184,30 +184,30 @@
             top: 10px;
             right: 10px;
             z-index: 1000;
-            background: white;
-            width: 50px;
-            height: 50px;
+            background: black;
+            width: 60px;
+            height: 60px;
             border-radius: 50%;
-            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            box-shadow: 0 0 10px rgba(0,0,0,0.5);
             display: flex;
             align-items: center;
             justify-content: center;
         }
         
         .compass-rose {
-            width: 40px;
-            height: 40px;
+            width: 50px;
+            height: 50px;
             border-radius: 50%;
             position: relative;
-            transition: transform 0.2s ease;
+            transition: transform 0.1s ease;
         }
         
         .compass-north {
             position: absolute;
-            top: 2px;
+            top: 3px;
             left: 50%;
             transform: translateX(-50%);
-            color: red;
+            color: white;
             font-weight: bold;
             font-size: 10px;
         }
@@ -217,19 +217,20 @@
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 3px;
-            height: 35px;
-            background: red;
+            width: 4px;
+            height: 40px;
+            background: yellow;
             border-radius: 2px;
         }
         
         .compass-direction {
             position: absolute;
-            bottom: 2px;
+            bottom: 3px;
             left: 50%;
             transform: translateX(-50%);
-            font-size: 8px;
-            color: #333;
+            font-size: 10px;
+            color: white;
+            font-weight: bold;
         }
         
         /* Stili per gli slider */
@@ -353,7 +354,7 @@
             }
             
             .compass-direction {
-                font-size: 10px;
+                font-size: 12px;
                 bottom: 5px;
             }
         }
@@ -456,7 +457,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <button id="submit">Aggiungi TriangoloV1</button>
+        <button id="submit">Aggiungi Triangolov2</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
         <button id="resetRotation">Reset Rotazione</button>
@@ -486,7 +487,7 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 5.4 (Stable)</div>
+        <div class="build-info" id="buildInfo">Build: 5.5 (Fixed)</div>
     </div>
     
     <!-- Controlli mobile -->
@@ -495,7 +496,7 @@
             <!-- Prima riga: pulsanti principali -->
             <div class="control-row">
                 <div class="control-group">
-                    <button id="submitMobile">Aggiungi Triangolo</button>
+                    <button id="submitMobile">Aggiungi Triangolov2</button>
                 </div>
                 <div class="control-group">
                     <button id="disableGPSMobile">DISABLE GPS</button>
@@ -535,7 +536,7 @@
             
             <!-- Status -->
             <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
-            <div class="build-info" id="buildInfoMobile">Build: 5.4 (Stable)</div>
+            <div class="build-info" id="buildInfoMobile">Build: 5.5 (Fixed)</div>
         </div>
     </div>
     
@@ -556,7 +557,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.4 (Stable)";
+        const BUILD_NUMBER = "5.5 (Fixed)";
         
         // Variabili globali
         let map;
@@ -571,6 +572,7 @@
         let rotationStartX = 0;
         let previousRotation = 0;
         let deviceOrientationHandler = null;
+        let deviceOrientationAlpha = 0;
         
         // Variabili per i slider
         let baseWidth = 500;
@@ -708,16 +710,19 @@
         // Avvia il tracking dell'orientamento del dispositivo
         function startDeviceOrientation() {
             deviceOrientationHandler = (event) => {
-                if (!gpsEnabled) return;
-                
                 // Ottieni l'orientamento dal dispositivo (bussola)
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
-                    // Formula corretta per la modalità navigazione
-                    const deviceOrientationAlpha = 270 - alpha;
-                    currentRotation = (360 - deviceOrientationAlpha) * Math.PI / 180;
-                    applyMapRotation();
+                    deviceOrientationAlpha = alpha;
+                    updateCompass();
+                    
+                    if (gpsEnabled) {
+                        // Formula corretta per la modalità navigazione
+                        const correctedAlpha = 270 - alpha;
+                        currentRotation = (360 - correctedAlpha) * Math.PI / 180;
+                        applyMapRotation();
+                    }
                 }
             };
             
@@ -819,7 +824,6 @@
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             view.setRotation(currentRotation);
-            updateCompass();
         }
         
         // Aggiorna la bussola grafica
@@ -827,11 +831,11 @@
             const compassRose = document.getElementById('compassRose');
             const compassDirection = document.getElementById('compassDirection');
             
-            const degrees = (currentRotation * 180 / Math.PI) % 360;
-            const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
+            // Usa deviceOrientationAlpha direttamente per la bussola
+            const normalizedDegrees = (deviceOrientationAlpha % 360 + 360) % 360;
             
-            // La bussola deve ruotare in senso opposto alla mappa per mostrare il nord corretto
-            compassRose.style.transform = `rotate(${-normalizedDegrees}deg)`;
+            // La bussola ruota con l'orientamento del dispositivo
+            compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
             compassDirection.textContent = Math.round(normalizedDegrees) + '°';
         }
         
@@ -948,6 +952,11 @@
                 updateStatus("GPS attivo" + (isMobile ? " - Modalità navigazione" : ""));
                 gpsEnabled = true;
                 
+                // Riavvia l'orientamento del dispositivo se era stato fermato
+                if (isMobile && !deviceOrientationHandler) {
+                    startDeviceOrientation();
+                }
+                
                 // Aggiorna interfaccia
                 document.getElementById('disableGPS').style.display = 'block';
                 document.getElementById('enableGPS').style.display = 'none';
@@ -963,9 +972,6 @@
             if (watchId) {
                 navigator.geolocation.clearWatch(watchId);
                 watchId = null;
-            }
-            if (deviceOrientationHandler) {
-                window.removeEventListener('deviceorientation', deviceOrientationHandler);
             }
             updateStatus("GPS disattivo");
             gpsEnabled = false;
@@ -1035,8 +1041,9 @@
         function createTriangle(observerPoint, originalRotation) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // La direzione verso l'alto della mappa è l'opposto della rotazione
-            const directionTowardsTop = (360 - (originalRotation * 180 / Math.PI)) % 360;
+            // I triangoli devono essere sempre diretti verso l'alto della pagina (0°)
+            // indipendentemente dall'orientamento della mappa
+            const directionTowardsTop = 0; // Sempre verso l'alto della pagina
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
             const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
@@ -1077,7 +1084,8 @@
                 observerPoint = view.getCenter();
             }
             
-            createTriangle(observerPoint, currentRotation);
+            // I triangoli devono sempre puntare verso l'alto (0°)
+            createTriangle(observerPoint, 0);
             updateStatus(`Triangolo aggiunto. Totale: ${triangles.length}`);
         }
         
