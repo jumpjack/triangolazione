@@ -162,6 +162,22 @@
             transform: translateY(-50%);
         }
         
+        /* Indicatore di direzione (triangolo) */
+        .direction-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 1001;
+            pointer-events: none;
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-bottom: 30px solid rgba(255, 0, 0, 0.7);
+            filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
+        }
+        
         /* Bussola grafica */
         .compass-graphic {
             position: absolute;
@@ -435,6 +451,9 @@
         <div class="center-crosshair"></div>
     </div>
     
+    <!-- Indicatore di direzione (triangolo) -->
+    <div class="direction-indicator" id="directionIndicator"></div>
+    
     <!-- Controlli desktop -->
     <div class="controls">
         <button id="submit">Aggiungi Triangolo</button>
@@ -537,7 +556,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.0 (Mobile Ready)";
+        const BUILD_NUMBER = "5.1 (Mobile Fixed)";
         
         // Variabili globali
         let map;
@@ -608,9 +627,12 @@
                 geometry: new ol.geom.Point(ol.proj.fromLonLat([0, 0]))
             });
             
+            // Stile del marker con triangolo orientabile
             const userMarkerStyle = new ol.style.Style({
-                image: new ol.style.Circle({
-                    radius: 6,
+                image: new ol.style.RegularShape({
+                    points: 3,
+                    radius: 10,
+                    rotation: 0,
                     fill: new ol.style.Fill({color: 'red'}),
                     stroke: new ol.style.Stroke({color: 'white', width: 2})
                 })
@@ -695,7 +717,9 @@
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
-                    // Converti in radianti e applica
+                    // CORREZIONE PRINCIPALE: 
+                    // Inverti la rotazione e converti in radianti
+                    // In OpenLayers, la rotazione positiva è in senso orario, ma vogliamo che la mappa ruoti con il dispositivo
                     currentRotation = -alpha * Math.PI / 180;
                     applyMapRotation();
                 }
@@ -796,11 +820,31 @@
             }
         }
         
-        // Funzioni rimanenti (applyMapRotation, updateAllTriangles, resetRotation, undoLastTriangle, clearAllTriangles, showConfirmDialog, startGPS, stopGPS, updatePosition, handleGeolocationError, calculateDestinationPoint, createTriangle, addTriangle, updateStatus) rimangono uguali alla versione precedente...
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             view.setRotation(currentRotation);
             updateCompass();
+            updateDirectionIndicator();
+            updateUserMarkerRotation();
+        }
+        
+        // Aggiorna la rotazione del marker dell'utente
+        function updateUserMarkerRotation() {
+            if (userMarker && userMarker.getStyle()) {
+                const style = userMarker.getStyle();
+                const image = style.getImage();
+                if (image && image.setRotation) {
+                    // Il marker triangolare deve puntare nella direzione opposta alla rotazione della mappa
+                    image.setRotation(currentRotation);
+                }
+            }
+        }
+        
+        // Aggiorna l'indicatore di direzione (triangolo)
+        function updateDirectionIndicator() {
+            const directionIndicator = document.getElementById('directionIndicator');
+            const degrees = (currentRotation * 180 / Math.PI) % 360;
+            directionIndicator.style.transform = `translate(-50%, -50%) rotate(${degrees}deg)`;
         }
         
         // Aggiorna la bussola grafica
@@ -811,7 +855,8 @@
             const degrees = (currentRotation * 180 / Math.PI) % 360;
             const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
             
-            compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
+            // La bussola deve ruotare in senso opposto alla mappa per mostrare il nord corretto
+            compassRose.style.transform = `rotate(${-normalizedDegrees}deg)`;
             compassDirection.textContent = Math.round(normalizedDegrees) + '°';
         }
         
@@ -968,6 +1013,8 @@
             if (gpsEnabled) {
                 view.setCenter(coords);
                 
+                // CORREZIONE: Usa l'heading del GPS solo se disponibile e non su mobile
+                // Su mobile usiamo l'orientamento del dispositivo
                 if (position.coords.heading !== null && !isMobile) {
                     currentRotation = -position.coords.heading * Math.PI / 180;
                     applyMapRotation();
@@ -1013,6 +1060,8 @@
         // Crea un triangolo
         function createTriangle(observerPoint, originalRotation) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
+            
+            // CORREZIONE: La direzione verso l'alto della mappa è l'opposto della rotazione
             const directionTowardsTop = (360 - (originalRotation * 180 / Math.PI)) % 360;
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
