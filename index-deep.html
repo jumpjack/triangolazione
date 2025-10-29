@@ -232,6 +232,53 @@
             color: #333;
         }
         
+        /* Indicatori di orientamento */
+        .orientation-info {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 1000;
+            background: white;
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.2);
+            font-size: 12px;
+            min-width: 200px;
+        }
+        
+        .orientation-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 5px;
+            padding: 2px 0;
+        }
+        
+        .orientation-label {
+            font-weight: bold;
+            color: #333;
+        }
+        
+        .orientation-value {
+            color: #666;
+            font-family: monospace;
+        }
+        
+        .device-orientation {
+            background: #e8f5e8;
+            border-left: 3px solid #4CAF50;
+        }
+        
+        .map-orientation {
+            background: #e3f2fd;
+            border-left: 3px solid #2196F3;
+        }
+        
+        .difference {
+            background: #fff3e0;
+            border-left: 3px solid #FF9800;
+            font-weight: bold;
+        }
+        
         /* Stili per gli slider */
         .slider-container {
             margin: 5px 0;
@@ -356,6 +403,13 @@
                 font-size: 10px;
                 bottom: 5px;
             }
+            
+            .orientation-info {
+                top: 80px;
+                left: 10px;
+                font-size: 14px;
+                min-width: 250px;
+            }
         }
         
         /* Overlay di conferma */
@@ -440,6 +494,13 @@
             .controls-mobile.show {
                 display: block;
             }
+            
+            .orientation-info {
+                top: 60px;
+                left: 10px;
+                right: 70px;
+                min-width: auto;
+            }
         }
     </style>
 </head>
@@ -453,6 +514,22 @@
     
     <!-- Indicatore di direzione (triangolo fisso) -->
     <div class="direction-indicator"></div>
+    
+    <!-- Indicatori di orientamento -->
+    <div class="orientation-info">
+        <div class="orientation-row device-orientation">
+            <span class="orientation-label">Bussola Dispositivo:</span>
+            <span class="orientation-value" id="deviceOrientationValue">0°</span>
+        </div>
+        <div class="orientation-row map-orientation">
+            <span class="orientation-label">Orientamento Mappa:</span>
+            <span class="orientation-value" id="mapOrientationValue">0°</span>
+        </div>
+        <div class="orientation-row difference">
+            <span class="orientation-label">Differenza:</span>
+            <span class="orientation-value" id="orientationDifferenceValue">0°</span>
+        </div>
+    </div>
     
     <!-- Controlli desktop -->
     <div class="controls">
@@ -486,7 +563,7 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 5.2 (Navigation Mode)</div>
+        <div class="build-info" id="buildInfo">Build: 5.3 (Orientation Debug)</div>
     </div>
     
     <!-- Controlli mobile -->
@@ -535,7 +612,7 @@
             
             <!-- Status -->
             <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
-            <div class="build-info" id="buildInfoMobile">Build: 5.2 (Navigation Mode)</div>
+            <div class="build-info" id="buildInfoMobile">Build: 5.3 (Orientation Debug)</div>
         </div>
     </div>
     
@@ -556,7 +633,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.2 (Navigation Mode)";
+        const BUILD_NUMBER = "5.3 (Orientation Debug)";
         
         // Variabili globali
         let map;
@@ -571,6 +648,7 @@
         let rotationStartX = 0;
         let previousRotation = 0;
         let deviceOrientationHandler = null;
+        let deviceOrientationAlpha = 0;
         
         // Variabili per i slider
         let baseWidth = 500;
@@ -714,6 +792,8 @@
                 let alpha = event.alpha; // 0-360 gradi, bussola
                 
                 if (alpha !== null) {
+                    deviceOrientationAlpha = alpha;
+                    
                     // CORREZIONE PRINCIPALE: 
                     // Per avere la modalità navigazione come Google Maps:
                     // Quando il telefono punta a nord (alpha=0), la mappa deve avere rotazione 0 (nord in alto)
@@ -721,6 +801,7 @@
                     // Quindi: rotazione mappa = -alpha
                     currentRotation = -alpha * Math.PI / 180;
                     applyMapRotation();
+                    updateOrientationInfo();
                 }
             };
             
@@ -767,6 +848,7 @@
                         const rotationDelta = deltaX * 0.005;
                         currentRotation = previousRotation + rotationDelta;
                         applyMapRotation();
+                        updateOrientationInfo();
                         e.preventDefault();
                         e.stopPropagation();
                     }
@@ -823,6 +905,31 @@
         function applyMapRotation() {
             view.setRotation(currentRotation);
             updateCompass();
+            updateOrientationInfo();
+        }
+        
+        // Aggiorna gli indicatori di orientamento
+        function updateOrientationInfo() {
+            const deviceOrientationValue = document.getElementById('deviceOrientationValue');
+            const mapOrientationValue = document.getElementById('mapOrientationValue');
+            const orientationDifferenceValue = document.getElementById('orientationDifferenceValue');
+            
+            // Orientamento dispositivo (bussola)
+            const deviceDegrees = Math.round(deviceOrientationAlpha);
+            
+            // Orientamento mappa
+            const mapDegreesRaw = currentRotation * 180 / Math.PI;
+            const mapDegrees = Math.round((mapDegreesRaw % 360 + 360) % 360);
+            
+            // Differenza
+            let difference = Math.abs(deviceDegrees - mapDegrees);
+            if (difference > 180) {
+                difference = 360 - difference;
+            }
+            
+            deviceOrientationValue.textContent = deviceDegrees + '°';
+            mapOrientationValue.textContent = mapDegrees + '°';
+            orientationDifferenceValue.textContent = difference + '°';
         }
         
         // Aggiorna la bussola grafica
@@ -995,6 +1102,7 @@
                 if (position.coords.heading !== null && !isMobile) {
                     currentRotation = -position.coords.heading * Math.PI / 180;
                     applyMapRotation();
+                    updateOrientationInfo();
                 }
             }
         }
