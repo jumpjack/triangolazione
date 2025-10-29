@@ -3,10 +3,10 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Triangolazione GPS con Leaflet</title>
+    <title>Triangolazione GPS con OpenLayers</title>
     
-    <!-- Leaflet CSS -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <!-- OpenLayers CSS -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.2.0/ol.css">
     
     <style>
         body {
@@ -19,8 +19,7 @@
         #map {
             width: 100%;
             height: 100vh;
-            z-index: 1;
-            transition: transform 0.1s ease;
+            position: relative;
         }
         
         .controls {
@@ -323,6 +322,11 @@
         .confirm-no:hover {
             background-color: #757575;
         }
+        
+        /* Stile per i triangoli */
+        .triangle-layer {
+            z-index: 100;
+        }
     </style>
 </head>
 <body>
@@ -364,7 +368,7 @@
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
-        <div class="build-info" id="buildInfo">Build: 3.0</div>
+        <div class="build-info" id="buildInfo">Build: 4.0 (OpenLayers)</div>
     </div>
     
     <!-- Bussola grafica -->
@@ -376,25 +380,24 @@
         </div>
     </div>
 
-    <!-- Leaflet JS -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <!-- OpenLayers JS -->
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
     
     <script>
         // Numero di build - incrementa ad ogni aggiornamento
-        const BUILD_NUMBER = "3.0";
+        const BUILD_NUMBER = "4.0 (OpenLayers)";
         
         // Variabili globali
         let map;
+        let view;
         let userMarker;
         let watchId;
         let gpsEnabled = true;
         let triangles = [];
         let currentRotation = 0;
         let isRotating = false;
-        let isDragging = false;
         let controlPressed = false;
         let rotationStartX = 0;
-        let dragStartPoint = null;
         let previousRotation = 0;
         
         // Variabili per i slider
@@ -404,29 +407,68 @@
         // Struttura per memorizzare i triangoli con le loro informazioni
         let triangleData = [];
         
+        // Layer per i triangoli
+        let triangleLayer;
+        let triangleSource;
+        
         // Inizializzazione della mappa
         function initMap() {
-            // Crea la mappa centrata su Roma (posizione di default)
-            map = L.map('map', {
-                zoomControl: true,
-                // Disabilita il drag nativo di Leaflet per gestirlo manualmente
-                dragging: false
-            }).setView([41.9028, 12.4964], 15);
+            // Crea la vista centrata su Roma
+            view = new ol.View({
+                center: ol.proj.fromLonLat([12.4964, 41.9028]),
+                zoom: 15,
+                rotation: 0
+            });
             
-            // Aggiungi il layer di base OpenStreetMap
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-            }).addTo(map);
+            // Crea la mappa
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    })
+                ],
+                view: view
+            });
             
-            // Inizializza il marker dell'utente
-            userMarker = L.marker([0, 0], {
-                icon: L.divIcon({
-                    className: 'user-marker',
-                    html: '<div style="background-color: red; width: 12px; height: 12px; border-radius: 50%; border: 2px solid white;"></div>',
-                    iconSize: [16, 16],
-                    iconAnchor: [8, 8]
+            // Crea il layer per i triangoli
+            triangleSource = new ol.source.Vector();
+            triangleLayer = new ol.layer.Vector({
+                source: triangleSource,
+                style: new ol.style.Style({
+                    fill: new ol.style.Fill({
+                        color: 'rgba(51, 136, 255, 0.3)'
+                    }),
+                    stroke: new ol.style.Stroke({
+                        color: 'blue',
+                        width: 2
+                    })
                 })
-            }).addTo(map);
+            });
+            map.addLayer(triangleLayer);
+            
+            // Crea il marker dell'utente
+            userMarker = new ol.Feature({
+                geometry: new ol.geom.Point(ol.proj.fromLonLat([0, 0]))
+            });
+            
+            const userMarkerStyle = new ol.style.Style({
+                image: new ol.style.Circle({
+                    radius: 6,
+                    fill: new ol.style.Fill({color: 'red'}),
+                    stroke: new ol.style.Stroke({color: 'white', width: 2})
+                })
+            });
+            userMarker.setStyle(userMarkerStyle);
+            
+            const userMarkerSource = new ol.source.Vector({
+                features: [userMarker]
+            });
+            
+            const userMarkerLayer = new ol.layer.Vector({
+                source: userMarkerSource
+            });
+            map.addLayer(userMarkerLayer);
             
             // Configura gli eventi per la rotazione e il trascinamento
             setupMapEvents();
@@ -446,7 +488,7 @@
         
         // Configura gli eventi della mappa
         function setupMapEvents() {
-            const mapContainer = map.getContainer();
+            const mapContainer = map.getTargetElement();
             
             // Eventi per il tasto Control
             document.addEventListener('keydown', function(e) {
@@ -465,25 +507,13 @@
                 }
             });
             
-            // Mouse events per rotazione e trascinamento
+            // Mouse events per rotazione
             mapContainer.addEventListener('mousedown', function(e) {
                 if (controlPressed && !gpsEnabled && e.button === 0) {
                     // Modalità rotazione - usa solo lo spostamento orizzontale
                     isRotating = true;
                     rotationStartX = e.clientX;
                     previousRotation = currentRotation;
-                    mapContainer.style.cursor = 'grabbing';
-                    e.preventDefault();
-                    e.stopPropagation();
-                } else if (!gpsEnabled && !controlPressed && e.button === 0) {
-                    // Modalità trascinamento
-                    isDragging = true;
-                    dragStartPoint = {
-                        clientX: e.clientX,
-                        clientY: e.clientY,
-                        center: map.getCenter(),
-                        zoom: map.getZoom()
-                    };
                     mapContainer.style.cursor = 'grabbing';
                     e.preventDefault();
                     e.stopPropagation();
@@ -494,38 +524,20 @@
                 if (isRotating && controlPressed && !gpsEnabled) {
                     // Rotazione basata sullo spostamento orizzontale del mouse
                     const deltaX = e.clientX - rotationStartX;
-                    const rotationDelta = deltaX * 0.5; // Fattore di sensibilità
+                    const rotationDelta = deltaX * 0.005; // Fattore di sensibilità ridotto per OpenLayers
                     
                     // Aggiorna la rotazione
                     currentRotation = previousRotation + rotationDelta;
                     
-                    // Normalizza la rotazione tra 0 e 360 per la visualizzazione
-                    const normalizedRotation = ((currentRotation % 360) + 360) % 360;
-                    
-                    applyMapRotation(normalizedRotation);
-                    e.preventDefault();
-                    e.stopPropagation();
-                } else if (isDragging && !gpsEnabled) {
-                    // Trascinamento della mappa - sempre orizzontale e verticale rispetto alla pagina
-                    if (dragStartPoint) {
-                        const deltaX = e.clientX - dragStartPoint.clientX;
-                        const deltaY = e.clientY - dragStartPoint.clientY;
-                        
-                        // Ruota il vettore di spostamento per compensare la rotazione della mappa
-                        const angle = -currentRotation * Math.PI / 180;
-                        const cos = Math.cos(angle);
-                        const sin = Math.sin(angle);
-                        
-                        const rotatedDeltaX = deltaX * cos - deltaY * sin;
-                        const rotatedDeltaY = deltaX * sin + deltaY * cos;
-                        
-                        // Calcola il nuovo centro in coordinate mondo
-                        const worldCenter = map.project(dragStartPoint.center, dragStartPoint.zoom);
-                        const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
-                        const newCenter = map.unproject(newWorldCenter, dragStartPoint.zoom);
-                        
-                        map.setView(newCenter, map.getZoom(), { animate: false });
+                    // Normalizza la rotazione tra -π e π per OpenLayers
+                    const normalizedRotation = ((currentRotation % (2 * Math.PI)) + (2 * Math.PI)) % (2 * Math.PI);
+                    if (normalizedRotation > Math.PI) {
+                        currentRotation = normalizedRotation - 2 * Math.PI;
+                    } else {
+                        currentRotation = normalizedRotation;
                     }
+                    
+                    applyMapRotation();
                     e.preventDefault();
                     e.stopPropagation();
                 }
@@ -540,93 +552,6 @@
                     e.preventDefault();
                     e.stopPropagation();
                 }
-                if (isDragging && e.button === 0) {
-                    isDragging = false;
-                    dragStartPoint = null;
-                    mapContainer.style.cursor = '';
-                    e.preventDefault();
-                    e.stopPropagation();
-                }
-            });
-            
-            // Touch events per mobile
-            let touchStartDistance = 0;
-            let touchStartAngle = 0;
-            let isTouchRotating = false;
-            let isTouchDragging = false;
-            let touchStartPoint = null;
-            let touchPreviousRotation = 0;
-            let touchStartX = 0;
-            
-            mapContainer.addEventListener('touchstart', function(e) {
-                if (!gpsEnabled) {
-                    if (e.touches.length === 2) {
-                        // Rotazione con due dita - usa solo lo spostamento orizzontale
-                        isTouchRotating = true;
-                        const touch = e.touches[0];
-                        touchStartX = touch.clientX;
-                        touchPreviousRotation = currentRotation;
-                        e.preventDefault();
-                    } else if (e.touches.length === 1) {
-                        // Trascinamento con un dito
-                        isTouchDragging = true;
-                        const touch = e.touches[0];
-                        touchStartPoint = {
-                            clientX: touch.clientX,
-                            clientY: touch.clientY,
-                            center: map.getCenter(),
-                            zoom: map.getZoom()
-                        };
-                        e.preventDefault();
-                    }
-                }
-            });
-            
-            mapContainer.addEventListener('touchmove', function(e) {
-                if (!gpsEnabled) {
-                    if (isTouchRotating && e.touches.length === 2) {
-                        const touch = e.touches[0];
-                        const deltaX = touch.clientX - touchStartX;
-                        const rotationDelta = deltaX * 0.5;
-                        
-                        // Aggiorna la rotazione
-                        currentRotation = touchPreviousRotation + rotationDelta;
-                        
-                        // Normalizza la rotazione tra 0 e 360 per la visualizzazione
-                        const normalizedRotation = ((currentRotation % 360) + 360) % 360;
-                        
-                        applyMapRotation(normalizedRotation);
-                        e.preventDefault();
-                    } else if (isTouchDragging && e.touches.length === 1) {
-                        const touch = e.touches[0];
-                        if (touchStartPoint) {
-                            const deltaX = touch.clientX - touchStartPoint.clientX;
-                            const deltaY = touch.clientY - touchStartPoint.clientY;
-                            
-                            // Ruota il vettore di spostamento per compensare la rotazione della mappa
-                            const angle = -currentRotation * Math.PI / 180;
-                            const cos = Math.cos(angle);
-                            const sin = Math.sin(angle);
-                            
-                            const rotatedDeltaX = deltaX * cos - deltaY * sin;
-                            const rotatedDeltaY = deltaX * sin + deltaY * cos;
-                            
-                            // Calcola il nuovo centro in coordinate mondo
-                            const worldCenter = map.project(touchStartPoint.center, touchStartPoint.zoom);
-                            const newWorldCenter = worldCenter.subtract([rotatedDeltaX, rotatedDeltaY]);
-                            const newCenter = map.unproject(newWorldCenter, touchStartPoint.zoom);
-                            
-                            map.setView(newCenter, map.getZoom(), { animate: false });
-                        }
-                        e.preventDefault();
-                    }
-                }
-            });
-            
-            mapContainer.addEventListener('touchend', function() {
-                isTouchRotating = false;
-                isTouchDragging = false;
-                touchStartPoint = null;
             });
         }
         
@@ -667,13 +592,11 @@
         // Aggiorna tutti i triangoli esistenti
         function updateAllTriangles() {
             // Rimuovi tutti i triangoli dalla mappa
-            triangles.forEach(triangle => {
-                map.removeLayer(triangle);
-            });
+            triangleSource.clear();
+            triangles = [];
             
             // Ricrea tutti i triangoli con le nuove dimensioni
             const oldTriangleData = [...triangleData];
-            triangles = [];
             triangleData = [];
             
             oldTriangleData.forEach(data => {
@@ -682,27 +605,25 @@
         }
         
         // Applica la rotazione alla mappa
-        function applyMapRotation(rotation = currentRotation) {
-            const mapContainer = map.getContainer();
-            // Usa sempre la rotazione normalizzata per la visualizzazione
-            const normalizedRotation = ((rotation % 360) + 360) % 360;
-            mapContainer.style.transform = `rotate(${normalizedRotation}deg)`;
-            updateCompass(normalizedRotation);
+        function applyMapRotation() {
+            view.setRotation(currentRotation);
+            updateCompass();
         }
         
         // Aggiorna la bussola grafica
-        function updateCompass(rotation = currentRotation) {
+        function updateCompass() {
             const compassRose = document.getElementById('compassRose');
             const compassDirection = document.getElementById('compassDirection');
             
-            // Usa sempre la rotazione normalizzata per la visualizzazione
-            const normalizedRotation = ((rotation % 360) + 360) % 360;
+            // Converti da radianti a gradi per la visualizzazione
+            const degrees = (currentRotation * 180 / Math.PI) % 360;
+            const normalizedDegrees = degrees < 0 ? degrees + 360 : degrees;
             
             // Ruota la bussola per mostrare l'orientamento
-            compassRose.style.transform = `rotate(${normalizedRotation}deg)`;
+            compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
             
             // Mostra la direzione in gradi
-            compassDirection.textContent = Math.round(normalizedRotation) + '°';
+            compassDirection.textContent = Math.round(normalizedDegrees) + '°';
         }
         
         // Resetta la rotazione
@@ -726,7 +647,7 @@
                     const lastTriangleData = triangleData.pop();
                     
                     if (lastTriangle) {
-                        map.removeLayer(lastTriangle);
+                        triangleSource.removeFeature(lastTriangle);
                     }
                     
                     updateStatus(`Rimosso ultimo triangolo. Rimangono: ${triangles.length}`);
@@ -745,10 +666,7 @@
                 "Vuoi davvero rimuovere tutti i triangoli?",
                 function() {
                     // Rimuovi tutti i triangoli dalla mappa
-                    triangles.forEach(triangle => {
-                        map.removeLayer(triangle);
-                    });
-                    
+                    triangleSource.clear();
                     triangles = [];
                     triangleData = [];
                     
@@ -832,17 +750,18 @@
         function updatePosition(position) {
             const lat = position.coords.latitude;
             const lng = position.coords.longitude;
+            const coords = ol.proj.fromLonLat([lng, lat]);
             
             // Aggiorna la posizione del marker
-            userMarker.setLatLng([lat, lng]);
+            userMarker.setGeometry(new ol.geom.Point(coords));
             
             // Se il GPS è attivo, centra e ruota la mappa
             if (gpsEnabled) {
-                map.setView([lat, lng], map.getZoom());
+                view.setCenter(coords);
                 
                 // Ruota la mappa in base all'orientamento
                 if (position.coords.heading !== null) {
-                    currentRotation = position.coords.heading;
+                    currentRotation = -position.coords.heading * Math.PI / 180; // Conversione a radianti e inversione
                     applyMapRotation();
                 }
             }
@@ -867,33 +786,54 @@
             updateStatus("Errore GPS: " + message);
         }
         
+        // Calcola un punto di destinazione date coordinate, direzione e distanza
+        function calculateDestinationPoint(startPoint, bearing, distance) {
+            const R = 6371000; // Raggio della Terra in metri
+            const lat1 = startPoint[1] * Math.PI / 180;
+            const lon1 = startPoint[0] * Math.PI / 180;
+            const brng = bearing * Math.PI / 180;
+            
+            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) +
+                Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
+            
+            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1),
+                Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
+            
+            return [lon2 * 180 / Math.PI, lat2 * 180 / Math.PI];
+        }
+        
         // Crea un triangolo
         function createTriangle(observerPoint, originalRotation) {
-            // Calcola i vertici del triangolo isoscele usando i valori degli slider
-            // baseDistance = altezza del triangolo (distanza dalla base)
-            // baseWidth = larghezza della base
+            // Converti le coordinate in gradi per il calcolo
+            const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // IMPORTANTE: Il triangolo va SEMPRE VERSO L'ALTO della pagina
-            // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
-            const directionTowardsTop = (360 - originalRotation) % 360;
+            // Calcola i vertici del triangolo isoscele
+            const directionTowardsTop = (360 - (originalRotation * 180 / Math.PI)) % 360;
             
-            // Vertice dell'osservatore (esattamente al centro)
-            const baseCenter = calculateDestinationPoint(observerPoint, directionTowardsTop, baseDistance);
-            
-            // Punti estremi della base (perpendicolari alla direzione)
+            // Vertice dell'osservatore
+            const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
             const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
             const baseRight = calculateDestinationPoint(baseCenter, directionTowardsTop + 90, baseWidth / 2);
             
+            // Converti le coordinate in formato OpenLayers
+            const observerCoords = observerPoint;
+            const baseCenterCoords = ol.proj.fromLonLat(baseCenter);
+            const baseLeftCoords = ol.proj.fromLonLat(baseLeft);
+            const baseRightCoords = ol.proj.fromLonLat(baseRight);
+            
             // Crea il poligono triangolare
-            const triangle = L.polygon([observerPoint, baseLeft, baseRight], {
-                color: 'blue',
-                fillColor: '#3388ff',
-                fillOpacity: 0.3,
-                weight: 2
-            }).addTo(map);
+            const triangle = new ol.Feature({
+                geometry: new ol.geom.Polygon([[
+                    observerCoords,
+                    baseLeftCoords,
+                    baseRightCoords,
+                    observerCoords
+                ]])
+            });
             
             // Aggiungi alla lista dei triangoli
             triangles.push(triangle);
+            triangleSource.addFeature(triangle);
             
             // Salva i dati del triangolo per poterlo ricreare
             triangleData.push({
@@ -910,29 +850,13 @@
             
             // Se il GPS è attivo, usa la posizione GPS, altrimenti usa il centro della mappa
             if (gpsEnabled) {
-                observerPoint = userMarker.getLatLng();
+                observerPoint = userMarker.getGeometry().getCoordinates();
             } else {
-                observerPoint = map.getCenter();
+                observerPoint = view.getCenter();
             }
             
             createTriangle(observerPoint, currentRotation);
             updateStatus(`Triangolo aggiunto. Totale: ${triangles.length}`);
-        }
-        
-        // Calcola un punto di destinazione date coordinate, direzione e distanza
-        function calculateDestinationPoint(startPoint, bearing, distance) {
-            const R = 6371000; // Raggio della Terra in metri
-            const lat1 = startPoint.lat * Math.PI / 180;
-            const lon1 = startPoint.lng * Math.PI / 180;
-            const brng = bearing * Math.PI / 180;
-            
-            const lat2 = Math.asin(Math.sin(lat1) * Math.cos(distance / R) +
-                Math.cos(lat1) * Math.sin(distance / R) * Math.cos(brng));
-            
-            const lon2 = lon1 + Math.atan2(Math.sin(brng) * Math.sin(distance / R) * Math.cos(lat1),
-                Math.cos(distance / R) - Math.sin(lat1) * Math.sin(lat2));
-            
-            return L.latLng(lat2 * 180 / Math.PI, lon2 * 180 / Math.PI);
         }
         
         // Aggiorna lo stato del GPS
