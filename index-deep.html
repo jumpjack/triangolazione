@@ -42,7 +42,6 @@
             background: white;
             padding: 10px;
             box-shadow: 0 -2px 10px rgba(0,0,0,0.2);
-            display: none;
             max-height: 50vh;
             overflow-y: auto;
         }
@@ -317,7 +316,6 @@
             }
             
             .controls {
-                display: block;
                 top: 10px;
                 right: 10px;
                 bottom: auto;
@@ -433,14 +431,6 @@
             .mobile-toggle {
                 display: flex;
             }
-            
-            .controls-mobile {
-                display: none;
-            }
-            
-            .controls-mobile.show {
-                display: block;
-            }
         }
     </style>
 </head>
@@ -457,7 +447,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.6 (Triangoli Fix)</div>
+        <div class="build-info">Build: 5.7 (Triangoli Up)</div>
         <button id="submit">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
@@ -491,57 +481,52 @@
     </div>
     
     <!-- Controlli mobile -->
-    <div class="controls-mobile" id="mobileControls">
-        <div class="mobile-controls">
-            <!-- Prima riga: pulsanti principali -->
-            <div class="control-row">
-                <div class="control-group">
-                    <button id="submitMobile">Aggiungi Triangolo</button>
-                </div>
-                <div class="control-group">
-                    <button id="disableGPSMobile">DISABLE GPS</button>
-                    <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
-                </div>
+    <div class="mobile-controls">
+        <div class="build-info">Build: 5.7 (Triangoli Up)</div>
+        <!-- Prima riga: pulsanti principali -->
+        <div class="control-row">
+            <div class="control-group">
+                <button id="submitMobile">Aggiungi Triangolo</button>
             </div>
-            
-            <!-- Seconda riga: azioni -->
-            <div class="control-row">
-                <div class="control-group">
-                    <button id="resetRotationMobile">Reset Rotazione</button>
-                </div>
-                <div class="control-group">
-                    <button id="undoMobile">UNDO</button>
-                </div>
-                <div class="control-group">
-                    <button id="clearMobile">CLEAR</button>
-                </div>
+            <div class="control-group">
+                <button id="disableGPSMobile">DISABLE GPS</button>
+                <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
             </div>
-            
-            <!-- Terza riga: slider -->
-            <div class="slider-container">
-                <div class="slider-label">
-                    <span class="slider-name">Larghezza Base</span>
-                    <span class="slider-value" id="baseWidthValueMobile">500 m</span>
-                </div>
-                <input type="range" min="100" max="2000" value="500" class="slider" id="baseWidthSliderMobile">
-            </div>
-            
-            <div class="slider-container">
-                <div class="slider-label">
-                    <span class="slider-name">Altezza</span>
-                    <span class="slider-value" id="baseDistanceValueMobile">1000 m</span>
-                </div>
-                <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSliderMobile">
-            </div>
-            
-            <!-- Status e Build Info -->
-            <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
-            <div class="build-info">Build: 5.6 (Triangoli Fix)</div>
         </div>
+        
+        <!-- Seconda riga: azioni -->
+        <div class="control-row">
+            <div class="control-group">
+                <button id="resetRotationMobile">Reset Rotazione</button>
+            </div>
+            <div class="control-group">
+                <button id="undoMobile">UNDO</button>
+            </div>
+            <div class="control-group">
+                <button id="clearMobile">CLEAR</button>
+            </div>
+        </div>
+        
+        <!-- Terza riga: slider -->
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Larghezza Base</span>
+                <span class="slider-value" id="baseWidthValueMobile">500 m</span>
+            </div>
+            <input type="range" min="100" max="2000" value="500" class="slider" id="baseWidthSliderMobile">
+        </div>
+        
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Altezza</span>
+                <span class="slider-value" id="baseDistanceValueMobile">1000 m</span>
+            </div>
+            <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSliderMobile">
+        </div>
+        
+        <!-- Status -->
+        <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
     </div>
-    
-    <!-- Pulsante toggle per mobile -->
-    <button class="mobile-toggle" id="mobileToggle">☰</button>
     
     <!-- Bussola grafica -->
     <div class="compass-graphic">
@@ -557,7 +542,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.6 (Triangoli Fix)";
+        const BUILD_NUMBER = "5.7 (Triangoli Up)";
         
         // Variabili globali
         let map;
@@ -694,13 +679,6 @@
                 // Altri browser - avvia direttamente
                 startDeviceOrientation();
             }
-            
-            // Setup toggle per controlli mobile
-            document.getElementById('mobileToggle').addEventListener('click', function() {
-                const mobileControls = document.getElementById('mobileControls');
-                mobileControls.classList.toggle('show');
-                this.textContent = mobileControls.classList.contains('show') ? '✕' : '☰';
-            });
         }
         
         // Avvia il tracking dell'orientamento del dispositivo
@@ -1037,9 +1015,9 @@
         function createTriangle(observerPoint) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // Il triangolo deve sempre partire dal centro e andare verso l'alto della pagina (0°)
-            // indipendentemente dall'orientamento della mappa
-            const directionTowardsTop = 0; // Sempre verso l'alto della pagina
+            // Il triangolo deve sempre partire dal centro e andare verso l'alto della pagina
+            // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
+            const directionTowardsTop = (360 - (currentRotation * 180 / Math.PI)) % 360;
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
             const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
