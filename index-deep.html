@@ -309,6 +309,12 @@
             border-radius: 4px;
         }
         
+        /* Pulsante largo */
+        .wide-button {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
         /* Desktop styles */
         @media (min-width: 768px) {
             #map {
@@ -447,8 +453,8 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.7 (Triangoli Up)</div>
-        <button id="submit">Aggiungi Triangolo</button>
+        <div class="build-info">Build: 5.8 (Calibrazione Auto)</div>
+        <button id="submit" class="wide-button">Aggiungi Triangolo</button>
         <button id="disableGPS">DISABLE GPS</button>
         <button id="enableGPS" style="display:none;">ENABLE GPS</button>
         <button id="resetRotation">Reset Rotazione</button>
@@ -473,7 +479,17 @@
                 <span class="slider-name">Altezza</span>
                 <span class="slider-value" id="baseDistanceValue">1000 m</span>
             </div>
-            <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSlider">
+            <input type="range" min="100" max="20000" value="1000" class="slider" id="baseDistanceSlider">
+        </div>
+        
+        <div class="sliders-title">Calibrazione Bussola</div>
+        
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Correzione Nord</span>
+                <span class="slider-value" id="compassCorrectionValue">0°</span>
+            </div>
+            <input type="range" min="-45" max="45" value="0" class="slider" id="compassCorrectionSlider">
         </div>
         
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
@@ -482,23 +498,24 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.7 (Triangoli Up)</div>
+        <div class="build-info">Build: 5.8 (Calibrazione Auto)</div>
+        
+        <!-- Pulsante largo per aggiungere triangolo -->
+        <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
+        
         <!-- Prima riga: pulsanti principali -->
         <div class="control-row">
             <div class="control-group">
-                <button id="submitMobile">Aggiungi Triangolo</button>
-            </div>
-            <div class="control-group">
                 <button id="disableGPSMobile">DISABLE GPS</button>
                 <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
+            </div>
+            <div class="control-group">
+                <button id="resetRotationMobile">Reset Rotazione</button>
             </div>
         </div>
         
         <!-- Seconda riga: azioni -->
         <div class="control-row">
-            <div class="control-group">
-                <button id="resetRotationMobile">Reset Rotazione</button>
-            </div>
             <div class="control-group">
                 <button id="undoMobile">UNDO</button>
             </div>
@@ -507,7 +524,7 @@
             </div>
         </div>
         
-        <!-- Terza riga: slider -->
+        <!-- Terza riga: slider triangolo -->
         <div class="slider-container">
             <div class="slider-label">
                 <span class="slider-name">Larghezza Base</span>
@@ -521,7 +538,16 @@
                 <span class="slider-name">Altezza</span>
                 <span class="slider-value" id="baseDistanceValueMobile">1000 m</span>
             </div>
-            <input type="range" min="100" max="5000" value="1000" class="slider" id="baseDistanceSliderMobile">
+            <input type="range" min="100" max="20000" value="1000" class="slider" id="baseDistanceSliderMobile">
+        </div>
+        
+        <!-- Quarto riga: calibrazione bussola -->
+        <div class="slider-container">
+            <div class="slider-label">
+                <span class="slider-name">Correzione Nord</span>
+                <span class="slider-value" id="compassCorrectionValueMobile">0°</span>
+            </div>
+            <input type="range" min="-45" max="45" value="0" class="slider" id="compassCorrectionSliderMobile">
         </div>
         
         <!-- Status -->
@@ -542,7 +568,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.7 (Triangoli Up)";
+        const BUILD_NUMBER = "5.8 (Calibrazione Auto)";
         
         // Variabili globali
         let map;
@@ -558,6 +584,7 @@
         let previousRotation = 0;
         let deviceOrientationHandler = null;
         let deviceOrientationAlpha = 0;
+        let compassCorrection = 0;
         
         // Variabili per i slider
         let baseWidth = 500;
@@ -573,8 +600,47 @@
         // Rileva se è mobile
         const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent);
         
+        // Carica le impostazioni salvate
+        function loadSettings() {
+            const savedCorrection = localStorage.getItem('compassCorrection');
+            if (savedCorrection !== null) {
+                compassCorrection = parseInt(savedCorrection);
+                document.getElementById('compassCorrectionSlider').value = compassCorrection;
+                document.getElementById('compassCorrectionSliderMobile').value = compassCorrection;
+                updateCompassCorrectionValue();
+            }
+            
+            const savedBaseDistance = localStorage.getItem('baseDistance');
+            if (savedBaseDistance !== null) {
+                baseDistance = parseInt(savedBaseDistance);
+                document.getElementById('baseDistanceSlider').value = baseDistance;
+                document.getElementById('baseDistanceSliderMobile').value = baseDistance;
+                document.getElementById('baseDistanceValue').textContent = baseDistance + ' m';
+                document.getElementById('baseDistanceValueMobile').textContent = baseDistance + ' m';
+            }
+            
+            const savedBaseWidth = localStorage.getItem('baseWidth');
+            if (savedBaseWidth !== null) {
+                baseWidth = parseInt(savedBaseWidth);
+                document.getElementById('baseWidthSlider').value = baseWidth;
+                document.getElementById('baseWidthSliderMobile').value = baseWidth;
+                document.getElementById('baseWidthValue').textContent = baseWidth + ' m';
+                document.getElementById('baseWidthValueMobile').textContent = baseWidth + ' m';
+            }
+        }
+        
+        // Salva le impostazioni
+        function saveSettings() {
+            localStorage.setItem('compassCorrection', compassCorrection);
+            localStorage.setItem('baseDistance', baseDistance);
+            localStorage.setItem('baseWidth', baseWidth);
+        }
+        
         // Inizializzazione della mappa
         function initMap() {
+            // Carica le impostazioni salvate
+            loadSettings();
+            
             // Crea la vista centrata su Roma
             view = new ol.View({
                 center: ol.proj.fromLonLat([12.4964, 41.9028]),
@@ -692,8 +758,8 @@
                     updateCompass();
                     
                     if (gpsEnabled) {
-                        // Formula corretta per la modalità navigazione
-                        const correctedAlpha = 270 - alpha;
+                        // Formula corretta per la modalità navigazione con correzione
+                        const correctedAlpha = 270 - (alpha + compassCorrection);
                         currentRotation = (360 - correctedAlpha) * Math.PI / 180;
                         applyMapRotation();
                     }
@@ -766,6 +832,7 @@
             // Slider desktop
             setupSliderPair('baseWidthSlider', 'baseWidthValue', 'baseWidthSliderMobile', 'baseWidthValueMobile');
             setupSliderPair('baseDistanceSlider', 'baseDistanceValue', 'baseDistanceSliderMobile', 'baseDistanceValueMobile');
+            setupCompassCorrectionSlider();
         }
         
         function setupSliderPair(desktopSliderId, desktopValueId, mobileSliderId, mobileValueId) {
@@ -781,6 +848,7 @@
                 desktopValue.textContent = value + ' m';
                 if (mobileValue) mobileValue.textContent = value + ' m';
                 updateAllTriangles();
+                saveSettings();
             }
             
             desktopSlider.addEventListener('input', function() {
@@ -795,6 +863,40 @@
             }
         }
         
+        function setupCompassCorrectionSlider() {
+            const desktopSlider = document.getElementById('compassCorrectionSlider');
+            const mobileSlider = document.getElementById('compassCorrectionSliderMobile');
+            
+            function updateCorrection(value) {
+                compassCorrection = parseInt(value);
+                updateCompassCorrectionValue();
+                saveSettings();
+                
+                // Ricalcola la rotazione della mappa con la nuova correzione
+                if (gpsEnabled && deviceOrientationAlpha !== null) {
+                    const correctedAlpha = 270 - (deviceOrientationAlpha + compassCorrection);
+                    currentRotation = (360 - correctedAlpha) * Math.PI / 180;
+                    applyMapRotation();
+                }
+            }
+            
+            desktopSlider.addEventListener('input', function() {
+                updateCorrection(this.value);
+                mobileSlider.value = this.value;
+            });
+            
+            mobileSlider.addEventListener('input', function() {
+                updateCorrection(this.value);
+                desktopSlider.value = this.value;
+            });
+        }
+        
+        function updateCompassCorrectionValue() {
+            const sign = compassCorrection >= 0 ? '+' : '';
+            document.getElementById('compassCorrectionValue').textContent = sign + compassCorrection + '°';
+            document.getElementById('compassCorrectionValueMobile').textContent = sign + compassCorrection + '°';
+        }
+        
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             view.setRotation(currentRotation);
@@ -805,10 +907,11 @@
             const compassRose = document.getElementById('compassRose');
             const compassDirection = document.getElementById('compassDirection');
             
-            // Usa deviceOrientationAlpha direttamente per la bussola
-            const normalizedDegrees = (deviceOrientationAlpha % 360 + 360) % 360;
+            // Usa deviceOrientationAlpha con correzione per la bussola
+            const correctedAlpha = (deviceOrientationAlpha + compassCorrection) % 360;
+            const normalizedDegrees = (correctedAlpha % 360 + 360) % 360;
             
-            // La bussola ruota con l'orientamento del dispositivo
+            // La bussola ruota con l'orientamento del dispositivo corretto
             compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
             compassDirection.textContent = Math.round(normalizedDegrees) + '°';
         }
