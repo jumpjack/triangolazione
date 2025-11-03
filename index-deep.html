@@ -68,7 +68,6 @@
         }
         
         button {
-            flex: 1;
             min-height: 44px;
             padding: 8px 4px;
             background-color: #4CAF50;
@@ -117,6 +116,17 @@
             color: #888;
             text-align: center;
             margin-top: 2px;
+        }
+        
+        /* Pulsante largo */
+        .wide-button {
+            width: 100%;
+            margin-bottom: 5px;
+        }
+        
+        /* Pulsanti normali */
+        .normal-button {
+            flex: 1;
         }
         
         /* Indicatore centrale */
@@ -447,16 +457,18 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.11 (Fix Rotazione Manuale)</div>
+        <div class="build-info">Build: 5.12 (Layout Migliorato)</div>
         
-        <!-- Prima riga: tutti i pulsanti principali -->
+        <!-- Pulsante Aggiungi Triangolo largo -->
+        <button id="submit" class="wide-button">Aggiungi Triangolo</button>
+        
+        <!-- Seconda riga: altri pulsanti -->
         <div class="control-row">
-            <button id="submit">Aggiungi Triangolo</button>
-            <button id="disableGPS">DISABLE GPS</button>
-            <button id="enableGPS" style="display:none;">ENABLE GPS</button>
-            <button id="resetRotation">Reset Rotazione</button>
-            <button id="undo">UNDO</button>
-            <button id="clear">CLEAR</button>
+            <button id="disableGPS" class="normal-button">DISABLE GPS</button>
+            <button id="enableGPS" class="normal-button" style="display:none;">ENABLE GPS</button>
+            <button id="resetRotation" class="normal-button">Reset Rotazione</button>
+            <button id="undo" class="normal-button">UNDO</button>
+            <button id="clear" class="normal-button">CLEAR</button>
         </div>
         
         <div class="sliders-title">Regola Triangolo</div>
@@ -493,19 +505,21 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.11 (Fix Rotazione Manuale)</div>
+        <div class="build-info">Build: 5.12 (Layout Migliorato)</div>
         
-        <!-- Prima riga: tutti i pulsanti principali -->
+        <!-- Pulsante Aggiungi Triangolo largo -->
+        <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
+        
+        <!-- Seconda riga: altri pulsanti -->
         <div class="control-row">
-            <button id="submitMobile">Aggiungi Triangolo</button>
-            <button id="disableGPSMobile">DISABLE GPS</button>
-            <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
-            <button id="resetRotationMobile">Reset Rotazione</button>
-            <button id="undoMobile">UNDO</button>
-            <button id="clearMobile">CLEAR</button>
+            <button id="disableGPSMobile" class="normal-button">DISABLE GPS</button>
+            <button id="enableGPSMobile" class="normal-button" style="display:none;">ENABLE GPS</button>
+            <button id="resetRotationMobile" class="normal-button">Reset Rotazione</button>
+            <button id="undoMobile" class="normal-button">UNDO</button>
+            <button id="clearMobile" class="normal-button">CLEAR</button>
         </div>
         
-        <!-- Seconda riga: slider triangolo -->
+        <!-- Terza riga: slider triangolo -->
         <div class="slider-container">
             <div class="slider-label">
                 <span class="slider-name">Larghezza Base</span>
@@ -522,7 +536,7 @@
             <input type="range" min="100" max="20000" value="1000" class="slider" id="baseDistanceSliderMobile">
         </div>
         
-        <!-- Terza riga: calibrazione bussola -->
+        <!-- Quarta riga: calibrazione bussola -->
         <div class="slider-container">
             <div class="slider-label">
                 <span class="slider-name">Correzione Nord</span>
