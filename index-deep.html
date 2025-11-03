@@ -309,12 +309,6 @@
             border-radius: 4px;
         }
         
-        /* Pulsante largo */
-        .wide-button {
-            width: 100%;
-            margin-bottom: 5px;
-        }
-        
         /* Desktop styles */
         @media (min-width: 768px) {
             #map {
@@ -453,13 +447,14 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.8 (Calibrazione Auto)</div>
-        <button id="submit" class="wide-button">Aggiungi Triangolo</button>
-        <button id="disableGPS">DISABLE GPS</button>
-        <button id="enableGPS" style="display:none;">ENABLE GPS</button>
-        <button id="resetRotation">Reset Rotazione</button>
+        <div class="build-info">Build: 5.9 (Layout Compatto)</div>
         
-        <div class="action-buttons">
+        <!-- Prima riga: tutti i pulsanti principali -->
+        <div class="control-row">
+            <button id="submit">Aggiungi Triangolo</button>
+            <button id="disableGPS">DISABLE GPS</button>
+            <button id="enableGPS" style="display:none;">ENABLE GPS</button>
+            <button id="resetRotation">Reset Rotazione</button>
             <button id="undo">UNDO</button>
             <button id="clear">CLEAR</button>
         </div>
@@ -498,33 +493,19 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.8 (Calibrazione Auto)</div>
+        <div class="build-info">Build: 5.9 (Layout Compatto)</div>
         
-        <!-- Pulsante largo per aggiungere triangolo -->
-        <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
-        
-        <!-- Prima riga: pulsanti principali -->
+        <!-- Prima riga: tutti i pulsanti principali -->
         <div class="control-row">
-            <div class="control-group">
-                <button id="disableGPSMobile">DISABLE GPS</button>
-                <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
-            </div>
-            <div class="control-group">
-                <button id="resetRotationMobile">Reset Rotazione</button>
-            </div>
+            <button id="submitMobile">Aggiungi Triangolo</button>
+            <button id="disableGPSMobile">DISABLE GPS</button>
+            <button id="enableGPSMobile" style="display:none;">ENABLE GPS</button>
+            <button id="resetRotationMobile">Reset Rotazione</button>
+            <button id="undoMobile">UNDO</button>
+            <button id="clearMobile">CLEAR</button>
         </div>
         
-        <!-- Seconda riga: azioni -->
-        <div class="control-row">
-            <div class="control-group">
-                <button id="undoMobile">UNDO</button>
-            </div>
-            <div class="control-group">
-                <button id="clearMobile">CLEAR</button>
-            </div>
-        </div>
-        
-        <!-- Terza riga: slider triangolo -->
+        <!-- Seconda riga: slider triangolo -->
         <div class="slider-container">
             <div class="slider-label">
                 <span class="slider-name">Larghezza Base</span>
@@ -541,7 +522,7 @@
             <input type="range" min="100" max="20000" value="1000" class="slider" id="baseDistanceSliderMobile">
         </div>
         
-        <!-- Quarto riga: calibrazione bussola -->
+        <!-- Terza riga: calibrazione bussola -->
         <div class="slider-container">
             <div class="slider-label">
                 <span class="slider-name">Correzione Nord</span>
@@ -568,7 +549,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.8 (Calibrazione Auto)";
+        const BUILD_NUMBER = "5.9 (Layout Compatto)";
         
         // Variabili globali
         let map;
