@@ -447,7 +447,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.9 (Layout Compatto)</div>
+        <div class="build-info">Build: 5.11 (Fix Rotazione Manuale)</div>
         
         <!-- Prima riga: tutti i pulsanti principali -->
         <div class="control-row">
@@ -493,7 +493,7 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.9 (Layout Compatto)</div>
+        <div class="build-info">Build: 5.11 (Fix Rotazione Manuale)</div>
         
         <!-- Prima riga: tutti i pulsanti principali -->
         <div class="control-row">
@@ -549,7 +549,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.9 (Layout Compatto)";
+        const BUILD_NUMBER = "5.11 (Fix Rotazione Manuale)";
         
         // Variabili globali
         let map;
@@ -1099,9 +1099,10 @@
         function createTriangle(observerPoint) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // Il triangolo deve sempre partire dal centro e andare verso l'alto della pagina
-            // Per compensare la rotazione della mappa, dobbiamo sottrarre la rotazione corrente
-            const directionTowardsTop = (360 - (currentRotation * 180 / Math.PI)) % 360;
+            // CORREZIONE: Usa SEMPRE la rotazione attuale della mappa
+            // Questa può essere impostata dal GPS O manualmente dall'utente
+            const currentMapRotation = view.getRotation(); // Ottieni la rotazione attuale della mappa
+            const directionTowardsTop = (360 - (currentMapRotation * 180 / Math.PI)) % 360;
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
             const baseLeft = calculateDestinationPoint(baseCenter, directionTowardsTop - 90, baseWidth / 2);
