@@ -187,61 +187,6 @@
             filter: drop-shadow(0 0 2px rgba(0,0,0,0.5));
         }
         
-        /* Bussola grafica */
-        .compass-graphic {
-            position: absolute;
-            top: 10px;
-            right: 10px;
-            z-index: 1000;
-            background: black;
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            box-shadow: 0 0 10px rgba(0,0,0,0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-        }
-        
-        .compass-rose {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            position: relative;
-            transition: transform 0.1s ease;
-        }
-        
-        .compass-north {
-            position: absolute;
-            top: 3px;
-            left: 50%;
-            transform: translateX(-50%);
-            color: white;
-            font-weight: bold;
-            font-size: 10px;
-        }
-        
-        .compass-needle {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            width: 4px;
-            height: 40px;
-            background: yellow;
-            border-radius: 2px;
-        }
-        
-        .compass-direction {
-            position: absolute;
-            bottom: 3px;
-            left: 50%;
-            transform: translateX(-50%);
-            font-size: 10px;
-            color: white;
-            font-weight: bold;
-        }
-        
         /* Stili per gli slider */
         .slider-container {
             margin: 5px 0;
@@ -344,27 +289,6 @@
                 padding: 8px 12px;
                 font-size: 14px;
             }
-            
-            .compass-graphic {
-                width: 80px;
-                height: 80px;
-                top: 80px;
-            }
-            
-            .compass-rose {
-                width: 70px;
-                height: 70px;
-            }
-            
-            .compass-north {
-                font-size: 14px;
-                top: 5px;
-            }
-            
-            .compass-direction {
-                font-size: 12px;
-                bottom: 5px;
-            }
         }
         
         /* Overlay di conferma */
@@ -457,7 +381,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.12 (Layout Migliorato)</div>
+        <div class="build-info">Build: 5.13 (Bussola Rimossa)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submit" class="wide-button">Aggiungi Triangolo</button>
@@ -505,7 +429,7 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.12 (Layout Migliorato)</div>
+        <div class="build-info">Build: 5.13 (Bussola Rimossa)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
@@ -548,22 +472,13 @@
         <!-- Status -->
         <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
     </div>
-    
-    <!-- Bussola grafica -->
-    <div class="compass-graphic">
-        <div class="compass-rose" id="compassRose">
-            <div class="compass-north">N</div>
-            <div class="compass-needle"></div>
-            <div class="compass-direction" id="compassDirection">0°</div>
-        </div>
-    </div>
 
     <!-- OpenLayers JS -->
     <script src="https://cdn.jsdelivr.net/npm/ol@8.2.0/dist/ol.js"></script>
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.11 (Fix Rotazione Manuale)";
+        const BUILD_NUMBER = "5.13 (Bussola Rimossa)";
         
         // Variabili globali
         let map;
@@ -750,7 +665,6 @@
                 
                 if (alpha !== null) {
                     deviceOrientationAlpha = alpha;
-                    updateCompass();
                     
                     if (gpsEnabled) {
                         // Formula corretta per la modalità navigazione con correzione
@@ -895,20 +809,6 @@
         // Applica la rotazione alla mappa
         function applyMapRotation() {
             view.setRotation(currentRotation);
-        }
-        
-        // Aggiorna la bussola grafica
-        function updateCompass() {
-            const compassRose = document.getElementById('compassRose');
-            const compassDirection = document.getElementById('compassDirection');
-            
-            // Usa deviceOrientationAlpha con correzione per la bussola
-            const correctedAlpha = (deviceOrientationAlpha + compassCorrection) % 360;
-            const normalizedDegrees = (correctedAlpha % 360 + 360) % 360;
-            
-            // La bussola ruota con l'orientamento del dispositivo corretto
-            compassRose.style.transform = `rotate(${normalizedDegrees}deg)`;
-            compassDirection.textContent = Math.round(normalizedDegrees) + '°';
         }
         
         // Aggiorna tutti i triangoli esistenti
@@ -1113,9 +1013,8 @@
         function createTriangle(observerPoint) {
             const observerLonLat = ol.proj.toLonLat(observerPoint);
             
-            // CORREZIONE: Usa SEMPRE la rotazione attuale della mappa
-            // Questa può essere impostata dal GPS O manualmente dall'utente
-            const currentMapRotation = view.getRotation(); // Ottieni la rotazione attuale della mappa
+            // Usa SEMPRE la rotazione attuale della mappa
+            const currentMapRotation = view.getRotation();
             const directionTowardsTop = (360 - (currentMapRotation * 180 / Math.PI)) % 360;
             
             const baseCenter = calculateDestinationPoint(observerLonLat, directionTowardsTop, baseDistance);
@@ -1156,7 +1055,6 @@
                 observerPoint = view.getCenter();
             }
             
-            // Il triangolo deve sempre partire dal centro e andare verso l'alto
             createTriangle(observerPoint);
             updateStatus(`Triangolo aggiunto. Totale: ${triangles.length}`);
         }
