@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mappa Interattiva Avanzata</title>
+    <title>Mappa Interattiva</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.1.0/ol.css">
     <style>
         * {
@@ -21,12 +21,39 @@
             background-color: #f5f5f5;
         }
         
-        header {
+        .header-controls {
             background-color: #2c3e50;
             color: white;
-            padding: 15px;
-            text-align: center;
+            padding: 10px 15px;
             box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 20px;
+            flex-wrap: wrap;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .slider-container label {
+            font-size: 14px;
+            min-width: 120px;
+        }
+        
+        .slider-value {
+            min-width: 60px;
+            text-align: right;
+            font-size: 14px;
+        }
+        
+        input[type="range"] {
+            width: 150px;
         }
         
         .container {
@@ -140,38 +167,6 @@
             border: 1px solid #ddd;
         }
         
-        .control-group {
-            margin-bottom: 15px;
-        }
-        
-        .control-group h3 {
-            margin-bottom: 8px;
-            font-size: 14px;
-            color: #2c3e50;
-        }
-        
-        .slider-container {
-            display: flex;
-            align-items: center;
-            margin-bottom: 5px;
-        }
-        
-        .slider-container label {
-            width: 120px;
-            font-size: 12px;
-        }
-        
-        .slider-value {
-            width: 50px;
-            text-align: right;
-            font-size: 12px;
-        }
-        
-        input[type="range"] {
-            flex: 1;
-            margin: 0 10px;
-        }
-        
         button {
             background-color: #3498db;
             color: white;
@@ -223,9 +218,20 @@
     </style>
 </head>
 <body>
-    <header>
-        <h1>Mappa Interattiva Avanzata</h1>
-    </header>
+    <div class="header-controls">
+        <div class="control-group">
+            <div class="slider-container">
+                <label>Abitanti minimi:</label>
+                <input type="range" id="minSizeSlider" min="0" max="100000" value="50000" step="1000">
+                <div class="slider-value" id="minSizeValue">50.000</div>
+            </div>
+            <div class="slider-container">
+                <label>Distanza massima (km):</label>
+                <input type="range" id="maxDistanceSlider" min="0" max="20" value="2" step="0.1">
+                <div class="slider-value" id="maxDistanceValue">2.0</div>
+            </div>
+        </div>
+    </div>
     
     <div class="container">
         <div class="ground-view" id="groundView">
@@ -249,20 +255,6 @@
             <div class="controls">
                 <button id="centerMap">Centra Mappa</button>
                 <button id="debugBtn">Modalità DEBUG</button>
-                
-                <div class="control-group">
-                    <h3>Filtri Centri Abitati</h3>
-                    <div class="slider-container">
-                        <label>Abitanti min:</label>
-                        <input type="range" id="minSizeSlider" min="0" max="100000" value="50000" step="1000">
-                        <div class="slider-value" id="minSizeValue">50.000</div>
-                    </div>
-                    <div class="slider-container">
-                        <label>Distanza max (km):</label>
-                        <input type="range" id="maxDistanceSlider" min="0" max="20" value="2" step="0.1">
-                        <div class="slider-value" id="maxDistanceValue">2.0</div>
-                    </div>
-                </div>
                 
                 <div class="status" id="locationStatus">Caricamento dati in corso...</div>
             </div>
@@ -480,7 +472,10 @@
         // Crea la lineetta di direzione (20 pixel)
         function createDirectionLine(lon, lat, heading) {
             const center = ol.proj.fromLonLat([lon, lat]);
-            const angle = (360 - heading) * Math.PI / 180; // Converti in radianti e inverte
+            
+            // Correzione: sottrai 90° per allineare correttamente la direzione
+            const correctedHeading = (heading - 90 + 360) % 360;
+            const angle = (360 - correctedHeading) * Math.PI / 180;
             
             // Calcola la lunghezza in metri equivalente a 20 pixel alla scala corrente
             const view = map.getView();
@@ -613,10 +608,13 @@
                 // Salta le città troppo lontane
                 if (distance > maxDistance) return;
                 
-                const headingToTown = calculateBearing(
+                let headingToTown = calculateBearing(
                     userLocation.lat, userLocation.lon, 
                     town.lat, town.lon
                 );
+                
+                // Correzione: inverti l'heading per la visuale da terra
+                headingToTown = (headingToTown + 180) % 360;
                 
                 // Calcola l'angolo relativo rispetto alla direzione dell'utente
                 let relativeAngle = headingToTown - userHeading;
@@ -649,7 +647,7 @@
                 infoElement.innerHTML = `
                     <strong>${town.name}</strong><br>
                     Distanza: ${distance.toFixed(1)} km<br>
-                    Direzione: ${Math.round(headingToTown)}°<br>
+                    Direzione: ${Math.round((headingToTown + 180) % 360)}°<br>
                     Abitanti: ${town.population.toLocaleString()}
                 `;
                 infoElement.style.left = `${50 + xPosition * 40}%`;
