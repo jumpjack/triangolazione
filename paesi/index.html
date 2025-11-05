@@ -203,18 +203,6 @@
             background: linear-gradient(to bottom, rgba(135, 206, 235, 0) 0%, rgba(34, 139, 34, 0.7) 100%);
             z-index: 1;
         }
-        
-        .loading {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
-            z-index: 100;
-        }
     </style>
 </head>
 <body>
@@ -261,6 +249,9 @@
         </div>
     </div>
 
+    <!-- File comuni.js con i dati locali -->
+    <script src="comuni.js"></script>
+    
     <script src="https://cdn.jsdelivr.net/npm/ol@8.1.0/dist/ol.js"></script>
     <script>
         // Variabili globali
@@ -341,24 +332,16 @@
             });
         }
 
-        // Carica i dati dei comuni italiani dalla nuova fonte
-        async function loadTownsData() {
+        // Carica i dati dei comuni dal file locale
+        function loadTownsData() {
             try {
-                document.getElementById('locationStatus').textContent = 'Caricamento dati comuni italiani...';
+                document.getElementById('locationStatus').textContent = 'Elaborazione dati comuni...';
                 
-                // Usa la nuova fonte dati
-                const dataUrl = 'https://axqvoqvbfjpaamphztgd.functions.supabase.co/comuni';
-                
-                const response = await fetch(dataUrl);
-                
-                if (!response.ok) {
-                    throw new Error('Errore nel caricamento dati');
-                }
-                
-                const data = await response.json();
+                // I dati sono già disponibili nella variabile globale 'comuni'
+                // dal file comuni.js incluso nella pagina
                 
                 // Estrai i dati dei comuni con popolazione e coordinate
-                towns = data.map(comune => ({
+                towns = comuni.map(comune => ({
                     name: comune.nome,
                     lat: parseFloat(comune.coordinate.lat),
                     lon: parseFloat(comune.coordinate.lng),
@@ -855,13 +838,13 @@
         }
 
         // Inizializzazione dell'applicazione
-        async function initApp() {
+        function initApp() {
             initMap();
             initDebugMode();
             initSliders();
             
-            // Carica i dati dei comuni
-            await loadTownsData();
+            // Carica i dati dei comuni dal file locale
+            loadTownsData();
             
             // Inizializza geolocalizzazione e bussola dopo il caricamento dei dati
             initGeolocation();
