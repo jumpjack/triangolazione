@@ -341,16 +341,15 @@
             });
         }
 
-        // Carica i dati dei centri abitati
+        // Carica i dati dei comuni italiani dalla nuova fonte
         async function loadTownsData() {
             try {
-                document.getElementById('locationStatus').textContent = 'Caricamento dati centri abitati...';
+                document.getElementById('locationStatus').textContent = 'Caricamento dati comuni italiani...';
                 
-                // Usa il proxy per scaricare i dati
-                const proxyUrl = 'https://win98.altervista.org/space/exploration/myp.php?pass=miapass&mode=native&url=';
-                const dataUrl = 'https://raw.githubusercontent.com/MatteoHenryChinaski/Comuni-Italiani-2018-SQL-JSON/master/comuni.json';
+                // Usa la nuova fonte dati
+                const dataUrl = 'https://axqvoqvbfjpaamphztgd.functions.supabase.co/comuni';
                 
-                const response = await fetch(proxyUrl + encodeURIComponent(dataUrl));
+                const response = await fetch(dataUrl);
                 
                 if (!response.ok) {
                     throw new Error('Errore nel caricamento dati');
@@ -358,15 +357,17 @@
                 
                 const data = await response.json();
                 
-                // Estrai i dati dei comuni con popolazione
+                // Estrai i dati dei comuni con popolazione e coordinate
                 towns = data.map(comune => ({
                     name: comune.nome,
-                    lat: parseFloat(comune.lat),
-                    lon: parseFloat(comune.lng),
-                    population: parseInt(comune.popolazione) || 0
-                })).filter(town => town.population > 0);
+                    lat: parseFloat(comune.coordinate.lat),
+                    lon: parseFloat(comune.coordinate.lng),
+                    population: parseInt(comune.popolazione) || 0,
+                    provincia: comune.provincia.nome,
+                    regione: comune.provincia.regione
+                })).filter(town => town.population > 0 && !isNaN(town.lat) && !isNaN(town.lon));
                 
-                document.getElementById('locationStatus').textContent = `Caricati ${towns.length} centri abitati`;
+                document.getElementById('locationStatus').textContent = `Caricati ${towns.length} comuni italiani`;
                 
                 // Inizializza i marker dopo il caricamento dei dati
                 addTownMarkersToMap();
@@ -377,16 +378,16 @@
                 
                 // Usa dati di esempio in caso di errore
                 towns = [
-                    { name: "Milano", lat: 45.4642, lon: 9.1900, population: 1366000 },
-                    { name: "Roma", lat: 41.9028, lon: 12.4964, population: 2873000 },
-                    { name: "Napoli", lat: 40.8518, lon: 14.2681, population: 967000 },
-                    { name: "Torino", lat: 45.0703, lon: 7.6869, population: 886000 },
-                    { name: "Palermo", lat: 38.1157, lon: 13.3615, population: 676000 },
-                    { name: "Firenze", lat: 43.7696, lon: 11.2558, population: 382000 },
-                    { name: "Bologna", lat: 44.4949, lon: 11.3426, population: 389000 },
-                    { name: "Genova", lat: 44.4056, lon: 8.9463, population: 580000 },
-                    { name: "Venezia", lat: 45.4408, lon: 12.3155, population: 261000 },
-                    { name: "Verona", lat: 45.4384, lon: 10.9916, population: 257000 }
+                    { name: "Milano", lat: 45.4642, lon: 9.1900, population: 1366000, provincia: "Milano", regione: "Lombardia" },
+                    { name: "Roma", lat: 41.9028, lon: 12.4964, population: 2873000, provincia: "Roma", regione: "Lazio" },
+                    { name: "Napoli", lat: 40.8518, lon: 14.2681, population: 967000, provincia: "Napoli", regione: "Campania" },
+                    { name: "Torino", lat: 45.0703, lon: 7.6869, population: 886000, provincia: "Torino", regione: "Piemonte" },
+                    { name: "Palermo", lat: 38.1157, lon: 13.3615, population: 676000, provincia: "Palermo", regione: "Sicilia" },
+                    { name: "Firenze", lat: 43.7696, lon: 11.2558, population: 382000, provincia: "Firenze", regione: "Toscana" },
+                    { name: "Bologna", lat: 44.4949, lon: 11.3426, population: 389000, provincia: "Bologna", regione: "Emilia-Romagna" },
+                    { name: "Genova", lat: 44.4056, lon: 8.9463, population: 580000, provincia: "Genova", regione: "Liguria" },
+                    { name: "Venezia", lat: 45.4408, lon: 12.3155, population: 261000, provincia: "Venezia", regione: "Veneto" },
+                    { name: "Verona", lat: 45.4384, lon: 10.9916, population: 257000, provincia: "Verona", regione: "Veneto" }
                 ];
                 
                 addTownMarkersToMap();
@@ -521,7 +522,7 @@
             map.addLayer(directionLine);
         }
 
-        // Aggiungi marker per i centri abitati sulla mappa
+        // Aggiungi marker per i comuni sulla mappa
         function addTownMarkersToMap() {
             // Rimuovi i marker precedenti
             townMarkers.forEach(marker => {
@@ -529,10 +530,10 @@
             });
             townMarkers = [];
             
-            // Filtra le città in base alla popolazione minima
+            // Filtra i comuni in base alla popolazione minima
             const filteredTowns = towns.filter(town => town.population >= minPopulationSize);
             
-            // Aggiungi i marker per ogni città
+            // Aggiungi i marker per ogni comune
             filteredTowns.forEach(town => {
                 const marker = new ol.layer.Vector({
                     source: new ol.source.Vector({
@@ -540,7 +541,9 @@
                             new ol.Feature({
                                 geometry: new ol.geom.Point(ol.proj.fromLonLat([town.lon, town.lat])),
                                 name: town.name,
-                                population: town.population
+                                population: town.population,
+                                provincia: town.provincia,
+                                regione: town.regione
                             })
                         ]
                     }),
@@ -595,17 +598,17 @@
             
             const groundView = document.getElementById('groundView');
             
-            // Filtra le città in base alla popolazione minima
+            // Filtra i comuni in base alla popolazione minima
             const filteredTowns = towns.filter(town => town.population >= minPopulationSize);
             
             filteredTowns.forEach(town => {
-                // Calcola la distanza e l'heading verso la città
+                // Calcola la distanza e l'heading verso il comune
                 const distance = calculateDistance(
                     userLocation.lat, userLocation.lon, 
                     town.lat, town.lon
                 );
                 
-                // Salta le città troppo lontane
+                // Salta i comuni troppo lontani
                 if (distance > maxDistance) return;
                 
                 let headingToTown = calculateBearing(
@@ -621,7 +624,7 @@
                 if (relativeAngle < 0) relativeAngle += 360;
                 if (relativeAngle > 360) relativeAngle -= 360;
                 
-                // Se la città è dietro di noi, non mostrarla
+                // Se il comune è dietro di noi, non mostrarlo
                 if (relativeAngle > 90 && relativeAngle < 270) return;
                 
                 // Calcola la posizione X nel campo visivo (da -1 a 1)
@@ -648,7 +651,8 @@
                     <strong>${town.name}</strong><br>
                     Distanza: ${distance.toFixed(1)} km<br>
                     Direzione: ${Math.round((headingToTown + 180) % 360)}°<br>
-                    Abitanti: ${town.population.toLocaleString()}
+                    Abitanti: ${town.population.toLocaleString()}<br>
+                    ${town.provincia} (${town.regione})
                 `;
                 infoElement.style.left = `${50 + xPosition * 40}%`;
                 infoElement.style.top = `${yPosition * 100}%`;
@@ -717,7 +721,7 @@
                     updateGroundView();
                     
                     document.getElementById('locationStatus').textContent = 
-                        `Posizione: ${lat.toFixed(6)}, ${lon.toFixed(6)} | ${towns.length} centri caricati`;
+                        `Posizione: ${lat.toFixed(6)}, ${lon.toFixed(6)} | ${towns.length} comuni caricati`;
                 },
                 error => {
                     let errorMessage = 'Errore di geolocalizzazione: ';
@@ -856,7 +860,7 @@
             initDebugMode();
             initSliders();
             
-            // Carica i dati dei centri abitati
+            // Carica i dati dei comuni
             await loadTownsData();
             
             // Inizializza geolocalizzazione e bussola dopo il caricamento dei dati
