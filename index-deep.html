@@ -366,6 +366,60 @@
                 display: flex;
             }
         }
+        
+        /* Stili per la visualizzazione del magnetometro */
+        .magnetometer-info {
+            margin-top: 8px;
+            padding: 8px;
+            background: white;
+            border-radius: 8px;
+            border: 1px solid #ddd;
+            font-size: 11px;
+        }
+        
+        .magnetometer-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            text-align: center;
+            color: #333;
+        }
+        
+        .magnetometer-values {
+            display: flex;
+            flex-direction: column;
+            gap: 3px;
+        }
+        
+        .magnetometer-value {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .magnetometer-label {
+            font-weight: bold;
+            color: #555;
+        }
+        
+        .magnetometer-data {
+            color: #2196F3;
+            font-family: monospace;
+        }
+        
+        .map-orientation {
+            margin-top: 5px;
+            padding: 5px;
+            background: #e8f5e9;
+            border-radius: 4px;
+            text-align: center;
+            font-size: 11px;
+            border: 1px solid #c8e6c9;
+        }
+        
+        .orientation-value {
+            font-weight: bold;
+            color: #2e7d32;
+            font-family: monospace;
+        }
     </style>
 </head>
 <body>
@@ -381,7 +435,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.13 (Bussola Rimossa)</div>
+        <div class="build-info">Build: 5.14 (Magnetometro)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submit" class="wide-button">Aggiungi Triangolo</button>
@@ -423,13 +477,41 @@
             <input type="range" min="-45" max="45" value="0" class="slider" id="compassCorrectionSlider">
         </div>
         
+        <!-- Informazioni Magnetometro -->
+        <div class="magnetometer-info">
+            <div class="magnetometer-title">MAGNETOMETRO</div>
+            <div class="magnetometer-values">
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">X:</span>
+                    <span class="magnetometer-data" id="magX">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Y:</span>
+                    <span class="magnetometer-data" id="magY">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Z:</span>
+                    <span class="magnetometer-data" id="magZ">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Heading:</span>
+                    <span class="magnetometer-data" id="magHeading">---</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Orientamento Mappa -->
+        <div class="map-orientation">
+            Orientamento Mappa: <span class="orientation-value" id="mapOrientation">0.00°</span>
+        </div>
+        
         <div class="help-text">CTRL + Trascina orizzontalmente per ruotare</div>
         <div class="status" id="status">GPS attivo</div>
     </div>
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.13 (Bussola Rimossa)</div>
+        <div class="build-info">Build: 5.14 (Magnetometro)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
@@ -469,6 +551,34 @@
             <input type="range" min="-45" max="45" value="0" class="slider" id="compassCorrectionSliderMobile">
         </div>
         
+        <!-- Informazioni Magnetometro Mobile -->
+        <div class="magnetometer-info">
+            <div class="magnetometer-title">MAGNETOMETRO</div>
+            <div class="magnetometer-values">
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">X:</span>
+                    <span class="magnetometer-data" id="magXMobile">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Y:</span>
+                    <span class="magnetometer-data" id="magYMobile">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Z:</span>
+                    <span class="magnetometer-data" id="magZMobile">---</span>
+                </div>
+                <div class="magnetometer-value">
+                    <span class="magnetometer-label">Heading:</span>
+                    <span class="magnetometer-data" id="magHeadingMobile">---</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Orientamento Mappa Mobile -->
+        <div class="map-orientation">
+            Orientamento Mappa: <span class="orientation-value" id="mapOrientationMobile">0.00°</span>
+        </div>
+        
         <!-- Status -->
         <div class="status" id="statusMobile">GPS attivo - Modalità navigazione</div>
     </div>
@@ -478,7 +588,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.13 (Bussola Rimossa)";
+        const BUILD_NUMBER = "5.14 (Magnetometro)";
         
         // Variabili globali
         let map;
@@ -495,6 +605,12 @@
         let deviceOrientationHandler = null;
         let deviceOrientationAlpha = 0;
         let compassCorrection = 0;
+        
+        // Variabili per i valori del magnetometro
+        let magnetometerX = null;
+        let magnetometerY = null;
+        let magnetometerZ = null;
+        let magnetometerHeading = null;
         
         // Variabili per i slider
         let baseWidth = 500;
@@ -622,6 +738,31 @@
             if (isMobile) {
                 setupMobileFeatures();
             }
+            
+            // Aggiorna periodicamente l'orientamento della mappa
+            setInterval(updateMapOrientationDisplay, 100);
+        }
+        
+        // Aggiorna la visualizzazione dell'orientamento della mappa
+        function updateMapOrientationDisplay() {
+            const rotationDegrees = (view.getRotation() * 180 / Math.PI).toFixed(2);
+            document.getElementById('mapOrientation').textContent = rotationDegrees + '°';
+            document.getElementById('mapOrientationMobile').textContent = rotationDegrees + '°';
+        }
+        
+        // Aggiorna la visualizzazione dei valori del magnetometro
+        function updateMagnetometerDisplay() {
+            // Desktop
+            document.getElementById('magX').textContent = magnetometerX !== null ? magnetometerX.toFixed(2) : '---';
+            document.getElementById('magY').textContent = magnetometerY !== null ? magnetometerY.toFixed(2) : '---';
+            document.getElementById('magZ').textContent = magnetometerZ !== null ? magnetometerZ.toFixed(2) : '---';
+            document.getElementById('magHeading').textContent = magnetometerHeading !== null ? magnetometerHeading.toFixed(2) + '°' : '---';
+            
+            // Mobile
+            document.getElementById('magXMobile').textContent = magnetometerX !== null ? magnetometerX.toFixed(2) : '---';
+            document.getElementById('magYMobile').textContent = magnetometerY !== null ? magnetometerY.toFixed(2) : '---';
+            document.getElementById('magZMobile').textContent = magnetometerZ !== null ? magnetometerZ.toFixed(2) : '---';
+            document.getElementById('magHeadingMobile').textContent = magnetometerHeading !== null ? magnetometerHeading.toFixed(2) + '°' : '---';
         }
         
         // Setup per funzionalità mobile
@@ -660,22 +801,68 @@
         // Avvia il tracking dell'orientamento del dispositivo
         function startDeviceOrientation() {
             deviceOrientationHandler = (event) => {
-                // Ottieni l'orientamento dal dispositivo (bussola)
-                let alpha = event.alpha; // 0-360 gradi, bussola
-                
-                if (alpha !== null) {
-                    deviceOrientationAlpha = alpha;
+                // Ottieni i valori raw del magnetometro (se disponibili)
+                if (event.webkitCompassHeading !== undefined) {
+                    // iOS - usa webkitCompassHeading
+                    magnetometerHeading = event.webkitCompassHeading;
+                    magnetometerX = Math.cos(magnetometerHeading * Math.PI / 180);
+                    magnetometerY = Math.sin(magnetometerHeading * Math.PI / 180);
+                    magnetometerZ = 0;
+                } else {
+                    // Android e altri browser - usa i valori alpha, beta, gamma
+                    // Nota: questi non sono esattamente i valori del magnetometro ma dell'orientamento
+                    const alpha = event.alpha; // 0-360 gradi, bussola (Z-axis)
+                    const beta = event.beta;   // -180 to 180 gradi (X-axis)
+                    const gamma = event.gamma; // -90 to 90 gradi (Y-axis)
                     
-                    if (gpsEnabled) {
-                        // Formula corretta per la modalità navigazione con correzione
-                        const correctedAlpha = 270 - (alpha + compassCorrection);
-                        currentRotation = (360 - correctedAlpha) * Math.PI / 180;
-                        applyMapRotation();
+                    if (alpha !== null) {
+                        magnetometerHeading = alpha;
+                        magnetometerX = beta !== null ? beta : 0;
+                        magnetometerY = gamma !== null ? gamma : 0;
+                        magnetometerZ = alpha;
                     }
+                }
+                
+                // Aggiorna la visualizzazione
+                updateMagnetometerDisplay();
+                
+                if (gpsEnabled && magnetometerHeading !== null) {
+                    // Formula corretta per la modalità navigazione con correzione
+                    const correctedHeading = 270 - (magnetometerHeading + compassCorrection);
+                    currentRotation = (360 - correctedHeading) * Math.PI / 180;
+                    applyMapRotation();
                 }
             };
             
             window.addEventListener('deviceorientation', deviceOrientationHandler);
+            
+            // Prova anche ad usare il Magnetometer API se disponibile
+            if ('Magnetometer' in window) {
+                try {
+                    const magnetometer = new Magnetometer({ frequency: 10 });
+                    
+                    magnetometer.addEventListener('reading', () => {
+                        // Questi sono i veri valori raw del magnetometro in microtesla (μT)
+                        magnetometerX = magnetometer.x;
+                        magnetometerY = magnetometer.y;
+                        magnetometerZ = magnetometer.z;
+                        
+                        // Calcola l'heading dal magnetometro
+                        if (magnetometer.x !== null && magnetometer.y !== null) {
+                            magnetometerHeading = Math.atan2(magnetometer.y, magnetometer.x) * 180 / Math.PI;
+                            if (magnetometerHeading < 0) {
+                                magnetometerHeading += 360;
+                            }
+                        }
+                        
+                        updateMagnetometerDisplay();
+                    });
+                    
+                    magnetometer.start();
+                } catch (error) {
+                    console.log("Magnetometer API non disponibile:", error);
+                }
+            }
         }
         
         // Configura gli eventi della mappa
@@ -782,9 +969,9 @@
                 saveSettings();
                 
                 // Ricalcola la rotazione della mappa con la nuova correzione
-                if (gpsEnabled && deviceOrientationAlpha !== null) {
-                    const correctedAlpha = 270 - (deviceOrientationAlpha + compassCorrection);
-                    currentRotation = (360 - correctedAlpha) * Math.PI / 180;
+                if (gpsEnabled && magnetometerHeading !== null) {
+                    const correctedHeading = 270 - (magnetometerHeading + compassCorrection);
+                    currentRotation = (360 - correctedHeading) * Math.PI / 180;
                     applyMapRotation();
                 }
             }
