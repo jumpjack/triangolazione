@@ -94,11 +94,12 @@
             border-radius: 50%;
             transform: translate(-50%, -50%);
             box-shadow: 0 0 5px rgba(0,0,0,0.5);
+            z-index: 5;
         }
         
         .marker-info {
             position: absolute;
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 255, 255, 0.95);
             padding: 8px 12px;
             border-radius: 6px;
             font-size: 12px;
@@ -106,7 +107,8 @@
             transform: translate(10px, -50%);
             box-shadow: 0 0 5px rgba(0,0,0,0.3);
             pointer-events: none;
-            z-index: 5;
+            z-index: 6;
+            border: 1px solid #ddd;
         }
         
         .map-container {
@@ -129,12 +131,13 @@
             position: absolute;
             top: 10px;
             left: 10px;
-            background-color: rgba(255, 255, 255, 0.9);
+            background-color: rgba(255, 255, 255, 0.95);
             padding: 15px;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
             z-index: 10;
             width: 300px;
+            border: 1px solid #ddd;
         }
         
         .control-group {
@@ -180,6 +183,7 @@
             font-size: 14px;
             width: 100%;
             margin-bottom: 8px;
+            transition: background-color 0.3s;
         }
         
         button:hover {
@@ -202,41 +206,19 @@
             width: 100%;
             height: 40%;
             background: linear-gradient(to bottom, rgba(135, 206, 235, 0) 0%, rgba(34, 139, 34, 0.7) 100%);
+            z-index: 1;
         }
         
-        .heading-indicator {
+        .loading {
             position: absolute;
             top: 50%;
             left: 50%;
             transform: translate(-50%, -50%);
-            width: 200px;
-            height: 200px;
-            border-radius: 50%;
-            background-color: rgba(255, 255, 255, 0.2);
-            border: 2px solid rgba(255, 255, 255, 0.5);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 5;
-        }
-        
-        .heading-line {
-            position: absolute;
-            width: 2px;
-            height: 100px;
-            background-color: #e74c3c;
-            transform-origin: bottom center;
-            bottom: 50%;
-        }
-        
-        .heading-text {
-            position: absolute;
-            bottom: 10px;
-            width: 100%;
-            text-align: center;
-            color: white;
-            font-weight: bold;
-            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 100;
         }
     </style>
 </head>
@@ -250,11 +232,6 @@
             <div class="compass">
                 <div class="compass-north">N</div>
                 <div class="compass-arrow" id="compassArrow"></div>
-            </div>
-            
-            <div class="heading-indicator">
-                <div class="heading-line" id="headingLine"></div>
-                <div class="heading-text" id="headingText">0°</div>
             </div>
             
             <div class="location-info">
@@ -276,18 +253,18 @@
                 <div class="control-group">
                     <h3>Filtri Centri Abitati</h3>
                     <div class="slider-container">
-                        <label>Dimensione minima:</label>
+                        <label>Abitanti min:</label>
                         <input type="range" id="minSizeSlider" min="0" max="100000" value="50000" step="1000">
                         <div class="slider-value" id="minSizeValue">50.000</div>
                     </div>
                     <div class="slider-container">
-                        <label>Distanza massima (km):</label>
+                        <label>Distanza max (km):</label>
                         <input type="range" id="maxDistanceSlider" min="0" max="20" value="2" step="0.1">
                         <div class="slider-value" id="maxDistanceValue">2.0</div>
                     </div>
                 </div>
                 
-                <div class="status" id="locationStatus">Posizione: in attesa...</div>
+                <div class="status" id="locationStatus">Caricamento dati in corso...</div>
             </div>
         </div>
     </div>
@@ -308,25 +285,7 @@
         let debugMode = false;
         let minPopulationSize = 50000;
         let maxDistance = 2; // km
-
-        // Centri abitati di esempio (coordinate, nome, popolazione)
-        const towns = [
-            { name: "Milano", lat: 45.4642, lon: 9.1900, population: 1366000 },
-            { name: "Roma", lat: 41.9028, lon: 12.4964, population: 2873000 },
-            { name: "Napoli", lat: 40.8518, lon: 14.2681, population: 967000 },
-            { name: "Torino", lat: 45.0703, lon: 7.6869, population: 886000 },
-            { name: "Palermo", lat: 38.1157, lon: 13.3615, population: 676000 },
-            { name: "Firenze", lat: 43.7696, lon: 11.2558, population: 382000 },
-            { name: "Bologna", lat: 44.4949, lon: 11.3426, population: 389000 },
-            { name: "Genova", lat: 44.4056, lon: 8.9463, population: 580000 },
-            { name: "Venezia", lat: 45.4408, lon: 12.3155, population: 261000 },
-            { name: "Verona", lat: 45.4384, lon: 10.9916, population: 257000 },
-            { name: "Bari", lat: 41.1171, lon: 16.8719, population: 323000 },
-            { name: "Catania", lat: 37.5079, lon: 15.0830, population: 311000 },
-            { name: "Padova", lat: 45.4064, lon: 11.8778, population: 210000 },
-            { name: "Trieste", lat: 45.6495, lon: 13.7768, population: 204000 },
-            { name: "Brescia", lat: 45.5416, lon: 10.2118, population: 196000 }
-        ];
+        let towns = [];
 
         // Inizializzazione della mappa
         function initMap() {
@@ -376,7 +335,6 @@
                     map.getView().setRotation(newRotation);
                     userHeading = (newRotation * 180 / Math.PI + 360) % 360;
                     updateGroundView();
-                    updateHeadingIndicator();
                 }
             }
             
@@ -389,6 +347,58 @@
             map.getViewport().addEventListener('contextmenu', function(evt) {
                 evt.preventDefault();
             });
+        }
+
+        // Carica i dati dei centri abitati
+        async function loadTownsData() {
+            try {
+                document.getElementById('locationStatus').textContent = 'Caricamento dati centri abitati...';
+                
+                // Usa il proxy per scaricare i dati
+                const proxyUrl = 'https://win98.altervista.org/space/exploration/myp.php?pass=miapass&mode=native&url=';
+                const dataUrl = 'https://raw.githubusercontent.com/MatteoHenryChinaski/Comuni-Italiani-2018-SQL-JSON/master/comuni.json';
+                
+                const response = await fetch(proxyUrl + encodeURIComponent(dataUrl));
+                
+                if (!response.ok) {
+                    throw new Error('Errore nel caricamento dati');
+                }
+                
+                const data = await response.json();
+                
+                // Estrai i dati dei comuni con popolazione
+                towns = data.map(comune => ({
+                    name: comune.nome,
+                    lat: parseFloat(comune.lat),
+                    lon: parseFloat(comune.lng),
+                    population: parseInt(comune.popolazione) || 0
+                })).filter(town => town.population > 0);
+                
+                document.getElementById('locationStatus').textContent = `Caricati ${towns.length} centri abitati`;
+                
+                // Inizializza i marker dopo il caricamento dei dati
+                addTownMarkersToMap();
+                
+            } catch (error) {
+                console.error('Errore nel caricamento dati:', error);
+                document.getElementById('locationStatus').textContent = 'Errore caricamento dati. Usando dati di esempio.';
+                
+                // Usa dati di esempio in caso di errore
+                towns = [
+                    { name: "Milano", lat: 45.4642, lon: 9.1900, population: 1366000 },
+                    { name: "Roma", lat: 41.9028, lon: 12.4964, population: 2873000 },
+                    { name: "Napoli", lat: 40.8518, lon: 14.2681, population: 967000 },
+                    { name: "Torino", lat: 45.0703, lon: 7.6869, population: 886000 },
+                    { name: "Palermo", lat: 38.1157, lon: 13.3615, population: 676000 },
+                    { name: "Firenze", lat: 43.7696, lon: 11.2558, population: 382000 },
+                    { name: "Bologna", lat: 44.4949, lon: 11.3426, population: 389000 },
+                    { name: "Genova", lat: 44.4056, lon: 8.9463, population: 580000 },
+                    { name: "Venezia", lat: 45.4408, lon: 12.3155, population: 261000 },
+                    { name: "Verona", lat: 45.4384, lon: 10.9916, population: 257000 }
+                ];
+                
+                addTownMarkersToMap();
+            }
         }
 
         // Centra la mappa sulla posizione dell'utente
@@ -438,23 +448,7 @@
             
             // Aggiungi la lineetta di direzione (20 pixel)
             if (userHeading !== null) {
-                directionLine = new ol.layer.Vector({
-                    source: new ol.source.Vector({
-                        features: [
-                            new ol.Feature({
-                                geometry: createDirectionLine(lon, lat, userHeading)
-                            })
-                        ]
-                    }),
-                    style: new ol.style.Style({
-                        stroke: new ol.style.Stroke({
-                            color: '#e74c3c',
-                            width: 3
-                        })
-                    })
-                });
-                
-                map.addLayer(directionLine);
+                updateDirectionLine();
             }
             
             // Aggiungi cerchio di accuratezza
@@ -503,6 +497,35 @@
             return new ol.geom.LineString([center, endPoint]);
         }
 
+        // Aggiorna la lineetta di direzione sulla mappa
+        function updateDirectionLine() {
+            if (!userLocation || userHeading === null) return;
+            
+            // Rimuovi la lineetta precedente
+            if (directionLine) {
+                map.removeLayer(directionLine);
+            }
+            
+            // Crea una nuova lineetta di direzione
+            directionLine = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [
+                        new ol.Feature({
+                            geometry: createDirectionLine(userLocation.lon, userLocation.lat, userHeading)
+                        })
+                    ]
+                }),
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#e74c3c',
+                        width: 3
+                    })
+                })
+            });
+            
+            map.addLayer(directionLine);
+        }
+
         // Aggiungi marker per i centri abitati sulla mappa
         function addTownMarkersToMap() {
             // Rimuovi i marker precedenti
@@ -521,7 +544,8 @@
                         features: [
                             new ol.Feature({
                                 geometry: new ol.geom.Point(ol.proj.fromLonLat([town.lon, town.lat])),
-                                name: town.name
+                                name: town.name,
+                                population: town.population
                             })
                         ]
                     }),
@@ -557,51 +581,8 @@
             document.getElementById('currentLon').textContent = userLocation.lon.toFixed(6);
             document.getElementById('currentHeading').textContent = Math.round(userHeading);
             
-            // Aggiorna l'indicatore di direzione
-            updateHeadingIndicator();
-            
             // Aggiorna la lineetta di direzione sulla mappa
             updateDirectionLine();
-        }
-
-        // Aggiorna l'indicatore di direzione nella visuale dal suolo
-        function updateHeadingIndicator() {
-            const headingLine = document.getElementById('headingLine');
-            const headingText = document.getElementById('headingText');
-            
-            if (userHeading !== null) {
-                headingLine.style.transform = `translate(-50%, 0) rotate(${userHeading}deg)`;
-                headingText.textContent = `${Math.round(userHeading)}°`;
-            }
-        }
-
-        // Aggiorna la lineetta di direzione sulla mappa
-        function updateDirectionLine() {
-            if (!userLocation || userHeading === null) return;
-            
-            // Rimuovi la lineetta precedente
-            if (directionLine) {
-                map.removeLayer(directionLine);
-            }
-            
-            // Crea una nuova lineetta di direzione
-            directionLine = new ol.layer.Vector({
-                source: new ol.source.Vector({
-                    features: [
-                        new ol.Feature({
-                            geometry: createDirectionLine(userLocation.lon, userLocation.lat, userHeading)
-                        })
-                    ]
-                }),
-                style: new ol.style.Style({
-                    stroke: new ol.style.Stroke({
-                        color: '#e74c3c',
-                        width: 3
-                    })
-                })
-            });
-            
-            map.addLayer(directionLine);
         }
 
         // Calcola la posizione dei marker nella visuale dal suolo
@@ -618,8 +599,6 @@
             groundViewMarkers = [];
             
             const groundView = document.getElementById('groundView');
-            const groundViewWidth = groundView.clientWidth;
-            const groundViewHeight = groundView.clientHeight;
             
             // Filtra le città in base alla popolazione minima
             const filteredTowns = towns.filter(town => town.population >= minPopulationSize);
@@ -740,7 +719,7 @@
                     updateGroundView();
                     
                     document.getElementById('locationStatus').textContent = 
-                        `Posizione: ${lat.toFixed(6)}, ${lon.toFixed(6)} (accuratezza: ${Math.round(accuracy)}m)`;
+                        `Posizione: ${lat.toFixed(6)}, ${lon.toFixed(6)} | ${towns.length} centri caricati`;
                 },
                 error => {
                     let errorMessage = 'Errore di geolocalizzazione: ';
@@ -874,13 +853,17 @@
         }
 
         // Inizializzazione dell'applicazione
-        function initApp() {
+        async function initApp() {
             initMap();
-            addTownMarkersToMap();
-            initGeolocation();
-            initCompass();
             initDebugMode();
             initSliders();
+            
+            // Carica i dati dei centri abitati
+            await loadTownsData();
+            
+            // Inizializza geolocalizzazione e bussola dopo il caricamento dei dati
+            initGeolocation();
+            initCompass();
             
             // Centra la mappa dopo un breve ritardo per permettere il caricamento
             setTimeout(centerMapOnUser, 1000);
