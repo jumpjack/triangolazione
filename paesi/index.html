@@ -238,39 +238,6 @@
             font-weight: bold;
             text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
         }
-        
-        .map-heading-indicator {
-            position: absolute;
-            top: 20px;
-            right: 110px;
-            width: 60px;
-            height: 60px;
-            background-color: rgba(255, 255, 255, 0.8);
-            border-radius: 50%;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            box-shadow: 0 0 10px rgba(0,0,0,0.3);
-            z-index: 10;
-        }
-        
-        .map-heading-arrow {
-            width: 3px;
-            height: 20px;
-            background-color: #e74c3c;
-            position: absolute;
-            top: 10px;
-            transform-origin: bottom center;
-            transition: transform 0.1s ease;
-        }
-        
-        .map-heading-text {
-            position: absolute;
-            bottom: 5px;
-            font-size: 10px;
-            font-weight: bold;
-            color: #e74c3c;
-        }
     </style>
 </head>
 <body>
@@ -301,10 +268,6 @@
         
         <div class="map-container">
             <div id="map"></div>
-            <div class="map-heading-indicator">
-                <div class="map-heading-arrow" id="mapHeadingArrow"></div>
-                <div class="map-heading-text">N</div>
-            </div>
             
             <div class="controls">
                 <button id="centerMap">Centra Mappa</button>
@@ -336,6 +299,7 @@
         let userHeading = null;
         let map = null;
         let userMarker = null;
+        let directionLine = null;
         let accuracyCircle = null;
         let townMarkers = [];
         let groundViewMarkers = [];
@@ -438,9 +402,12 @@
 
         // Aggiorna la posizione dell'utente sulla mappa
         function updateUserLocationOnMap(lat, lon, accuracy) {
-            // Rimuovi il marker precedente se esiste
+            // Rimuovi i layer precedenti se esistono
             if (userMarker) {
                 map.removeLayer(userMarker);
+            }
+            if (directionLine) {
+                map.removeLayer(directionLine);
             }
             if (accuracyCircle) {
                 map.removeLayer(accuracyCircle);
@@ -469,6 +436,27 @@
             
             map.addLayer(userMarker);
             
+            // Aggiungi la lineetta di direzione (20 pixel)
+            if (userHeading !== null) {
+                directionLine = new ol.layer.Vector({
+                    source: new ol.source.Vector({
+                        features: [
+                            new ol.Feature({
+                                geometry: createDirectionLine(lon, lat, userHeading)
+                            })
+                        ]
+                    }),
+                    style: new ol.style.Style({
+                        stroke: new ol.style.Stroke({
+                            color: '#e74c3c',
+                            width: 3
+                        })
+                    })
+                });
+                
+                map.addLayer(directionLine);
+            }
+            
             // Aggiungi cerchio di accuratezza
             accuracyCircle = new ol.layer.Vector({
                 source: new ol.source.Vector({
@@ -493,6 +481,26 @@
             });
             
             map.addLayer(accuracyCircle);
+        }
+
+        // Crea la lineetta di direzione (20 pixel)
+        function createDirectionLine(lon, lat, heading) {
+            const center = ol.proj.fromLonLat([lon, lat]);
+            const angle = (360 - heading) * Math.PI / 180; // Converti in radianti e inverte
+            
+            // Calcola la lunghezza in metri equivalente a 20 pixel alla scala corrente
+            const view = map.getView();
+            const resolution = view.getResolution();
+            const pixelLength = 20; // 20 pixel
+            const meterLength = pixelLength * resolution;
+            
+            // Calcola il punto finale
+            const endLon = lon + (meterLength * Math.sin(angle)) / (111320 * Math.cos(lat * Math.PI / 180));
+            const endLat = lat + (meterLength * Math.cos(angle)) / 110540;
+            
+            const endPoint = ol.proj.fromLonLat([endLon, endLat]);
+            
+            return new ol.geom.LineString([center, endPoint]);
         }
 
         // Aggiungi marker per i centri abitati sulla mappa
@@ -543,7 +551,6 @@
             
             // Aggiorna la freccia della bussola
             document.getElementById('compassArrow').style.transform = `rotate(${userHeading}deg)`;
-            document.getElementById('mapHeadingArrow').style.transform = `rotate(${userHeading}deg)`;
             
             // Aggiorna le informazioni sulla posizione
             document.getElementById('currentLat').textContent = userLocation.lat.toFixed(6);
@@ -552,6 +559,9 @@
             
             // Aggiorna l'indicatore di direzione
             updateHeadingIndicator();
+            
+            // Aggiorna la lineetta di direzione sulla mappa
+            updateDirectionLine();
         }
 
         // Aggiorna l'indicatore di direzione nella visuale dal suolo
@@ -563,6 +573,35 @@
                 headingLine.style.transform = `translate(-50%, 0) rotate(${userHeading}deg)`;
                 headingText.textContent = `${Math.round(userHeading)}°`;
             }
+        }
+
+        // Aggiorna la lineetta di direzione sulla mappa
+        function updateDirectionLine() {
+            if (!userLocation || userHeading === null) return;
+            
+            // Rimuovi la lineetta precedente
+            if (directionLine) {
+                map.removeLayer(directionLine);
+            }
+            
+            // Crea una nuova lineetta di direzione
+            directionLine = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [
+                        new ol.Feature({
+                            geometry: createDirectionLine(userLocation.lon, userLocation.lat, userHeading)
+                        })
+                    ]
+                }),
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: '#e74c3c',
+                        width: 3
+                    })
+                })
+            });
+            
+            map.addLayer(directionLine);
         }
 
         // Calcola la posizione dei marker nella visuale dal suolo
