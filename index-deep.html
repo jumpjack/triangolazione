@@ -751,20 +751,24 @@
         }
         
         // Aggiorna la visualizzazione dei valori del magnetometro
-        function updateMagnetometerDisplay() {
-            // Desktop
-            document.getElementById('magX').textContent = magnetometerX !== null ? magnetometerX.toFixed(2) : '---';
-            document.getElementById('magY').textContent = magnetometerY !== null ? magnetometerY.toFixed(2) : '---';
-            document.getElementById('magZ').textContent = magnetometerZ !== null ? magnetometerZ.toFixed(2) : '---';
-            document.getElementById('magHeading').textContent = magnetometerHeading !== null ? magnetometerHeading.toFixed(2) + '°' : '---';
-            
-            // Mobile
-            document.getElementById('magXMobile').textContent = magnetometerX !== null ? magnetometerX.toFixed(2) : '---';
-            document.getElementById('magYMobile').textContent = magnetometerY !== null ? magnetometerY.toFixed(2) : '---';
-            document.getElementById('magZMobile').textContent = magnetometerZ !== null ? magnetometerZ.toFixed(2) : '---';
-            document.getElementById('magHeadingMobile').textContent = magnetometerHeading !== null ? magnetometerHeading.toFixed(2) + '°' : '---';
-        }
-        
+function updateMagnetometerDisplay() {
+    // Desktop
+    const xValue = magnetometerX !== null ? magnetometerX.toFixed(2) : 'N/D';
+    const yValue = magnetometerY !== null ? magnetometerY.toFixed(2) : 'N/D';
+    const zValue = magnetometerZ !== null ? magnetometerZ.toFixed(2) : 'N/D';
+    const headingValue = magnetometerHeading !== null ? magnetometerHeading.toFixed(2) + '°' : '---';
+    
+    document.getElementById('magX').textContent = xValue;
+    document.getElementById('magY').textContent = yValue;
+    document.getElementById('magZ').textContent = zValue;
+    document.getElementById('magHeading').textContent = headingValue;
+    
+    // Mobile (stessi valori)
+    document.getElementById('magXMobile').textContent = xValue;
+    document.getElementById('magYMobile').textContent = yValue;
+    document.getElementById('magZMobile').textContent = zValue;
+    document.getElementById('magHeadingMobile').textContent = headingValue;
+}        
         // Setup per funzionalità mobile
         function setupMobileFeatures() {
             // Attiva l'orientamento del dispositivo
@@ -799,40 +803,83 @@
         }
         
         // Avvia il tracking dell'orientamento del dispositivo
-        function startDeviceOrientation() {
-            deviceOrientationHandler = (event) => {
-                // Ottieni i valori raw del magnetometro (se disponibili)
-                if (event.webkitCompassHeading !== undefined) {
-                    // iOS - usa webkitCompassHeading
-                    magnetometerHeading = event.webkitCompassHeading;
-                    magnetometerX = Math.cos(magnetometerHeading * Math.PI / 180);
-                    magnetometerY = Math.sin(magnetometerHeading * Math.PI / 180);
-                    magnetometerZ = 0;
-                } else {
-                    // Android e altri browser - usa i valori alpha, beta, gamma
-                    // Nota: questi non sono esattamente i valori del magnetometro ma dell'orientamento
-                    const alpha = event.alpha; // 0-360 gradi, bussola (Z-axis)
-                    const beta = event.beta;   // -180 to 180 gradi (X-axis)
-                    const gamma = event.gamma; // -90 to 90 gradi (Y-axis)
-                    
-                    if (alpha !== null) {
-                        magnetometerHeading = alpha;
-                        magnetometerX = beta !== null ? beta : 0;
-                        magnetometerY = gamma !== null ? gamma : 0;
-                        magnetometerZ = alpha;
+// Sostituisci la funzione startDeviceOrientation con questa:
+
+function startDeviceOrientation() {
+    let hasRawMagnetometer = false;
+    
+    // PRIMA prova con Magnetometer API per valori raw
+    if ('Magnetometer' in window) {
+        try {
+            const magnetometer = new Magnetometer({ frequency: 10 });
+            
+            magnetometer.addEventListener('reading', () => {
+                // VALORI RAW VERI del magnetometro
+                magnetometerX = magnetometer.x;
+                magnetometerY = magnetometer.y;
+                magnetometerZ = magnetometer.z;
+                hasRawMagnetometer = true;
+                
+                // Calcola l'heading dai valori raw
+                if (magnetometer.x !== null && magnetometer.y !== null) {
+                    magnetometerHeading = Math.atan2(magnetometer.y, magnetometer.x) * 180 / Math.PI;
+                    if (magnetometerHeading < 0) {
+                        magnetometerHeading += 360;
                     }
                 }
                 
-                // Aggiorna la visualizzazione
                 updateMagnetometerDisplay();
-                
-                if (gpsEnabled && magnetometerHeading !== null) {
-                    // Formula corretta per la modalità navigazione con correzione
-                    const correctedHeading = 270 - (magnetometerHeading + compassCorrection);
-                    currentRotation = (360 - correctedHeading) * Math.PI / 180;
-                    applyMapRotation();
-                }
-            };
+            });
+            
+            magnetometer.start();
+            console.log("Magnetometer API attiva - valori RAW disponibili");
+            
+        } catch (error) {
+            console.log("Magnetometer API non disponibile:", error);
+        }
+    }
+    
+    // POI usa DeviceOrientation come fallback (solo per heading)
+    deviceOrientationHandler = (event) => {
+        // Se non abbiamo valori raw, mostriamo che non sono disponibili
+        if (!hasRawMagnetometer) {
+            magnetometerX = null;
+            magnetometerY = null; 
+            magnetometerZ = null;
+        }
+        
+        // Heading da DeviceOrientation
+        if (event.alpha !== null) {
+            magnetometerHeading = event.alpha;
+            
+            if (!hasRawMagnetometer) {
+                // Se non abbiamo valori raw, usiamo alpha come Z per display
+                magnetometerZ = event.alpha;
+                magnetometerX = event.beta !== null ? event.beta : 0;
+                magnetometerY = event.gamma !== null ? event.gamma : 0;
+            }
+        }
+        
+        // iOS specific
+        if (event.webkitCompassHeading !== undefined) {
+            magnetometerHeading = event.webkitCompassHeading;
+            if (!hasRawMagnetometer) {
+                magnetometerZ = event.webkitCompassHeading;
+            }
+        }
+        
+        updateMagnetometerDisplay();
+        
+        // Rotazione mappa
+        if (gpsEnabled && magnetometerHeading !== null) {
+            const correctedHeading = 270 - (magnetometerHeading + compassCorrection);
+            currentRotation = (360 - correctedHeading) * Math.PI / 180;
+            applyMapRotation();
+        }
+    };
+    
+    window.addEventListener('deviceorientation', deviceOrientationHandler);
+}
             
             window.addEventListener('deviceorientation', deviceOrientationHandler);
             
