@@ -435,7 +435,7 @@
     
     <!-- Controlli desktop -->
     <div class="controls">
-        <div class="build-info">Build: 5.14 (Magnetometro)</div>
+        <div class="build-info">Build: 5.15 (Magnetometro)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submit" class="wide-button">Aggiungi Triangolo</button>
@@ -511,7 +511,7 @@
     
     <!-- Controlli mobile -->
     <div class="mobile-controls">
-        <div class="build-info">Build: 5.14 (Magnetometro)</div>
+        <div class="build-info">Build: 5.15 (Magnetometro)</div>
         
         <!-- Pulsante Aggiungi Triangolo largo -->
         <button id="submitMobile" class="wide-button">Aggiungi Triangolo</button>
@@ -588,7 +588,7 @@
     
     <script>
         // Numero di build
-        const BUILD_NUMBER = "5.14 (Magnetometro)";
+        const BUILD_NUMBER = "5.15 (Magnetometro)";
         
         // Variabili globali
         let map;
@@ -802,7 +802,6 @@ function updateMagnetometerDisplay() {
             }
         }
         
-        // Avvia il tracking dell'orientamento del dispositivo
 // Sostituisci la funzione startDeviceOrientation con questa:
 
 function startDeviceOrientation() {
@@ -881,7 +880,6 @@ function startDeviceOrientation() {
     window.addEventListener('deviceorientation', deviceOrientationHandler);
 }
             
-            window.addEventListener('deviceorientation', deviceOrientationHandler);
             
             // Prova anche ad usare il Magnetometer API se disponibile
             if ('Magnetometer' in window) {
