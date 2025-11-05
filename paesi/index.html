@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mappa Interattiva con Visuale dal Suolo</title>
+    <title>Mappa Interattiva Avanzata</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.1.0/ol.css">
     <style>
         * {
@@ -129,11 +129,44 @@
             position: absolute;
             top: 10px;
             left: 10px;
-            background-color: rgba(255, 255, 255, 0.8);
-            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 15px;
             border-radius: 8px;
             box-shadow: 0 0 10px rgba(0,0,0,0.2);
             z-index: 10;
+            width: 300px;
+        }
+        
+        .control-group {
+            margin-bottom: 15px;
+        }
+        
+        .control-group h3 {
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        
+        .slider-container {
+            display: flex;
+            align-items: center;
+            margin-bottom: 5px;
+        }
+        
+        .slider-container label {
+            width: 120px;
+            font-size: 12px;
+        }
+        
+        .slider-value {
+            width: 50px;
+            text-align: right;
+            font-size: 12px;
+        }
+        
+        input[type="range"] {
+            flex: 1;
+            margin: 0 10px;
         }
         
         button {
@@ -145,10 +178,16 @@
             cursor: pointer;
             margin-right: 5px;
             font-size: 14px;
+            width: 100%;
+            margin-bottom: 8px;
         }
         
         button:hover {
             background-color: #2980b9;
+        }
+        
+        #debugBtn.active {
+            background-color: #e74c3c;
         }
         
         .status {
@@ -164,11 +203,79 @@
             height: 40%;
             background: linear-gradient(to bottom, rgba(135, 206, 235, 0) 0%, rgba(34, 139, 34, 0.7) 100%);
         }
+        
+        .heading-indicator {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background-color: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 5;
+        }
+        
+        .heading-line {
+            position: absolute;
+            width: 2px;
+            height: 100px;
+            background-color: #e74c3c;
+            transform-origin: bottom center;
+            bottom: 50%;
+        }
+        
+        .heading-text {
+            position: absolute;
+            bottom: 10px;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-weight: bold;
+            text-shadow: 1px 1px 2px rgba(0,0,0,0.7);
+        }
+        
+        .map-heading-indicator {
+            position: absolute;
+            top: 20px;
+            right: 110px;
+            width: 60px;
+            height: 60px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        
+        .map-heading-arrow {
+            width: 3px;
+            height: 20px;
+            background-color: #e74c3c;
+            position: absolute;
+            top: 10px;
+            transform-origin: bottom center;
+            transition: transform 0.1s ease;
+        }
+        
+        .map-heading-text {
+            position: absolute;
+            bottom: 5px;
+            font-size: 10px;
+            font-weight: bold;
+            color: #e74c3c;
+        }
     </style>
 </head>
 <body>
     <header>
-        <h1>Mappa Interattiva con Visuale dal Suolo</h1>
+        <h1>Mappa Interattiva Avanzata</h1>
     </header>
     
     <div class="container">
@@ -176,6 +283,11 @@
             <div class="compass">
                 <div class="compass-north">N</div>
                 <div class="compass-arrow" id="compassArrow"></div>
+            </div>
+            
+            <div class="heading-indicator">
+                <div class="heading-line" id="headingLine"></div>
+                <div class="heading-text" id="headingText">0°</div>
             </div>
             
             <div class="location-info">
@@ -189,8 +301,29 @@
         
         <div class="map-container">
             <div id="map"></div>
+            <div class="map-heading-indicator">
+                <div class="map-heading-arrow" id="mapHeadingArrow"></div>
+                <div class="map-heading-text">N</div>
+            </div>
+            
             <div class="controls">
                 <button id="centerMap">Centra Mappa</button>
+                <button id="debugBtn">Modalità DEBUG</button>
+                
+                <div class="control-group">
+                    <h3>Filtri Centri Abitati</h3>
+                    <div class="slider-container">
+                        <label>Dimensione minima:</label>
+                        <input type="range" id="minSizeSlider" min="0" max="100000" value="50000" step="1000">
+                        <div class="slider-value" id="minSizeValue">50.000</div>
+                    </div>
+                    <div class="slider-container">
+                        <label>Distanza massima (km):</label>
+                        <input type="range" id="maxDistanceSlider" min="0" max="20" value="2" step="0.1">
+                        <div class="slider-value" id="maxDistanceValue">2.0</div>
+                    </div>
+                </div>
+                
                 <div class="status" id="locationStatus">Posizione: in attesa...</div>
             </div>
         </div>
@@ -208,19 +341,27 @@
         let groundViewMarkers = [];
         let watchId = null;
         let compassWatchId = null;
+        let debugMode = false;
+        let minPopulationSize = 50000;
+        let maxDistance = 2; // km
 
-        // Centri abitati di esempio (coordinate, nome)
+        // Centri abitati di esempio (coordinate, nome, popolazione)
         const towns = [
-            { name: "Milano", lat: 45.4642, lon: 9.1900 },
-            { name: "Roma", lat: 41.9028, lon: 12.4964 },
-            { name: "Napoli", lat: 40.8518, lon: 14.2681 },
-            { name: "Torino", lat: 45.0703, lon: 7.6869 },
-            { name: "Palermo", lat: 38.1157, lon: 13.3615 },
-            { name: "Firenze", lat: 43.7696, lon: 11.2558 },
-            { name: "Bologna", lat: 44.4949, lon: 11.3426 },
-            { name: "Genova", lat: 44.4056, lon: 8.9463 },
-            { name: "Venezia", lat: 45.4408, lon: 12.3155 },
-            { name: "Verona", lat: 45.4384, lon: 10.9916 }
+            { name: "Milano", lat: 45.4642, lon: 9.1900, population: 1366000 },
+            { name: "Roma", lat: 41.9028, lon: 12.4964, population: 2873000 },
+            { name: "Napoli", lat: 40.8518, lon: 14.2681, population: 967000 },
+            { name: "Torino", lat: 45.0703, lon: 7.6869, population: 886000 },
+            { name: "Palermo", lat: 38.1157, lon: 13.3615, population: 676000 },
+            { name: "Firenze", lat: 43.7696, lon: 11.2558, population: 382000 },
+            { name: "Bologna", lat: 44.4949, lon: 11.3426, population: 389000 },
+            { name: "Genova", lat: 44.4056, lon: 8.9463, population: 580000 },
+            { name: "Venezia", lat: 45.4408, lon: 12.3155, population: 261000 },
+            { name: "Verona", lat: 45.4384, lon: 10.9916, population: 257000 },
+            { name: "Bari", lat: 41.1171, lon: 16.8719, population: 323000 },
+            { name: "Catania", lat: 37.5079, lon: 15.0830, population: 311000 },
+            { name: "Padova", lat: 45.4064, lon: 11.8778, population: 210000 },
+            { name: "Trieste", lat: 45.6495, lon: 13.7768, population: 204000 },
+            { name: "Brescia", lat: 45.5416, lon: 10.2118, population: 196000 }
         ];
 
         // Inizializzazione della mappa
@@ -243,6 +384,47 @@
             
             // Centra la mappa sulla posizione corrente
             document.getElementById('centerMap').addEventListener('click', centerMapOnUser);
+            
+            // Aggiungi interazione per la modalità DEBUG
+            map.on('click', function(evt) {
+                if (debugMode) {
+                    const coords = ol.proj.toLonLat(evt.coordinate);
+                    userLocation = { lat: coords[1], lon: coords[0] };
+                    updateUserLocationOnMap(userLocation.lat, userLocation.lon, 100);
+                    updateGroundView();
+                }
+            });
+            
+            // Aggiungi interazione per ruotare la mappa in modalità DEBUG
+            let rotationStart = 0;
+            map.on('pointerdown', function(evt) {
+                if (debugMode && evt.originalEvent.button === 2) { // Tasto destro
+                    rotationStart = map.getView().getRotation();
+                    document.addEventListener('pointermove', rotateMap);
+                    document.addEventListener('pointerup', stopRotateMap);
+                }
+            });
+            
+            function rotateMap(evt) {
+                if (debugMode) {
+                    const deltaX = evt.movementX;
+                    const newRotation = rotationStart - deltaX * 0.01;
+                    map.getView().setRotation(newRotation);
+                    userHeading = (newRotation * 180 / Math.PI + 360) % 360;
+                    updateGroundView();
+                    updateHeadingIndicator();
+                }
+            }
+            
+            function stopRotateMap() {
+                document.removeEventListener('pointermove', rotateMap);
+                document.removeEventListener('pointerup', stopRotateMap);
+            }
+            
+            // Previeni il menu contestuale sul tasto destro
+            map.getViewport().addEventListener('contextmenu', function(evt) {
+                evt.preventDefault();
+            });
         }
 
         // Centra la mappa sulla posizione dell'utente
@@ -321,8 +503,11 @@
             });
             townMarkers = [];
             
+            // Filtra le città in base alla popolazione minima
+            const filteredTowns = towns.filter(town => town.population >= minPopulationSize);
+            
             // Aggiungi i marker per ogni città
-            towns.forEach(town => {
+            filteredTowns.forEach(town => {
                 const marker = new ol.layer.Vector({
                     source: new ol.source.Vector({
                         features: [
@@ -358,11 +543,26 @@
             
             // Aggiorna la freccia della bussola
             document.getElementById('compassArrow').style.transform = `rotate(${userHeading}deg)`;
+            document.getElementById('mapHeadingArrow').style.transform = `rotate(${userHeading}deg)`;
             
             // Aggiorna le informazioni sulla posizione
             document.getElementById('currentLat').textContent = userLocation.lat.toFixed(6);
             document.getElementById('currentLon').textContent = userLocation.lon.toFixed(6);
             document.getElementById('currentHeading').textContent = Math.round(userHeading);
+            
+            // Aggiorna l'indicatore di direzione
+            updateHeadingIndicator();
+        }
+
+        // Aggiorna l'indicatore di direzione nella visuale dal suolo
+        function updateHeadingIndicator() {
+            const headingLine = document.getElementById('headingLine');
+            const headingText = document.getElementById('headingText');
+            
+            if (userHeading !== null) {
+                headingLine.style.transform = `translate(-50%, 0) rotate(${userHeading}deg)`;
+                headingText.textContent = `${Math.round(userHeading)}°`;
+            }
         }
 
         // Calcola la posizione dei marker nella visuale dal suolo
@@ -382,12 +582,18 @@
             const groundViewWidth = groundView.clientWidth;
             const groundViewHeight = groundView.clientHeight;
             
-            towns.forEach(town => {
+            // Filtra le città in base alla popolazione minima
+            const filteredTowns = towns.filter(town => town.population >= minPopulationSize);
+            
+            filteredTowns.forEach(town => {
                 // Calcola la distanza e l'heading verso la città
                 const distance = calculateDistance(
                     userLocation.lat, userLocation.lon, 
                     town.lat, town.lon
                 );
+                
+                // Salta le città troppo lontane
+                if (distance > maxDistance) return;
                 
                 const headingToTown = calculateBearing(
                     userLocation.lat, userLocation.lon, 
@@ -405,13 +611,12 @@
                 // Calcola la posizione X nel campo visivo (da -1 a 1)
                 let xPosition = 0;
                 if (relativeAngle <= 90) {
-                    xPosition = -Math.cos(relativeAngle * Math.PI / 180);
+                    xPosition = Math.sin(relativeAngle * Math.PI / 180);
                 } else {
-                    xPosition = Math.cos((360 - relativeAngle) * Math.PI / 180);
+                    xPosition = Math.sin((relativeAngle - 180) * Math.PI / 180);
                 }
                 
                 // Calcola la posizione Y (più lontano = più in alto)
-                const maxDistance = 500; // km
                 const yPosition = 0.7 - (distance / maxDistance) * 0.5;
                 
                 // Crea il marker
@@ -426,7 +631,8 @@
                 infoElement.innerHTML = `
                     <strong>${town.name}</strong><br>
                     Distanza: ${distance.toFixed(1)} km<br>
-                    Direzione: ${Math.round(headingToTown)}°
+                    Direzione: ${Math.round(headingToTown)}°<br>
+                    Abitanti: ${town.population.toLocaleString()}
                 `;
                 infoElement.style.left = `${50 + xPosition * 40}%`;
                 infoElement.style.top = `${yPosition * 100}%`;
@@ -480,6 +686,8 @@
             // Avvia il monitoraggio della posizione
             watchId = navigator.geolocation.watchPosition(
                 position => {
+                    if (debugMode) return; // Ignora in modalità DEBUG
+                    
                     const lat = position.coords.latitude;
                     const lon = position.coords.longitude;
                     const accuracy = position.coords.accuracy;
@@ -547,6 +755,8 @@
 
         // Gestisce i dati dell'orientamento del dispositivo
         function handleOrientation(event) {
+            if (debugMode) return; // Ignora in modalità DEBUG
+            
             if (event.alpha !== null) {
                 // Calcola l'heading corretto in base all'orientamento del dispositivo
                 let heading = event.alpha; // alpha: orientamento rispetto al nord magnetico
@@ -569,12 +779,69 @@
             }
         }
 
+        // Gestione della modalità DEBUG
+        function initDebugMode() {
+            const debugBtn = document.getElementById('debugBtn');
+            
+            debugBtn.addEventListener('click', function() {
+                debugMode = !debugMode;
+                
+                if (debugMode) {
+                    debugBtn.textContent = 'Disattiva DEBUG';
+                    debugBtn.classList.add('active');
+                    document.getElementById('locationStatus').textContent = 
+                        'Modalità DEBUG attiva - Usa click per posizione, tasto destro per ruotare';
+                    
+                    // Imposta una posizione di default se non c'è
+                    if (!userLocation) {
+                        userLocation = { lat: 41.9028, lon: 12.4964 }; // Roma
+                        updateUserLocationOnMap(userLocation.lat, userLocation.lon, 100);
+                    }
+                    
+                    // Imposta un heading di default se non c'è
+                    if (!userHeading) {
+                        userHeading = 0;
+                    }
+                    
+                    updateGroundView();
+                } else {
+                    debugBtn.textContent = 'Modalità DEBUG';
+                    debugBtn.classList.remove('active');
+                    document.getElementById('locationStatus').textContent = 
+                        'Modalità normale - Usando GPS e bussola del dispositivo';
+                }
+            });
+        }
+
+        // Gestione degli slider
+        function initSliders() {
+            const minSizeSlider = document.getElementById('minSizeSlider');
+            const minSizeValue = document.getElementById('minSizeValue');
+            const maxDistanceSlider = document.getElementById('maxDistanceSlider');
+            const maxDistanceValue = document.getElementById('maxDistanceValue');
+            
+            minSizeSlider.addEventListener('input', function() {
+                minPopulationSize = parseInt(this.value);
+                minSizeValue.textContent = minPopulationSize.toLocaleString();
+                addTownMarkersToMap();
+                updateGroundView();
+            });
+            
+            maxDistanceSlider.addEventListener('input', function() {
+                maxDistance = parseFloat(this.value);
+                maxDistanceValue.textContent = maxDistance.toFixed(1);
+                updateGroundView();
+            });
+        }
+
         // Inizializzazione dell'applicazione
         function initApp() {
             initMap();
             addTownMarkersToMap();
             initGeolocation();
             initCompass();
+            initDebugMode();
+            initSliders();
             
             // Centra la mappa dopo un breve ritardo per permettere il caricamento
             setTimeout(centerMapOnUser, 1000);
