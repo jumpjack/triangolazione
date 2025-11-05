@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mappa Interattiva con Visuale dal Suolo</title>
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/ol@8.1.0/ol.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background-color: #f5f5f5;
+        }
+        
+        header {
+            background-color: #2c3e50;
+            color: white;
+            padding: 15px;
+            text-align: center;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        
+        .container {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+        }
+        
+        .ground-view {
+            flex: 1;
+            background-color: #87CEEB;
+            position: relative;
+            overflow: hidden;
+            border-bottom: 2px solid #2c3e50;
+        }
+        
+        .compass {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 80px;
+            height: 80px;
+            background-color: rgba(255, 255, 255, 0.8);
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 10px rgba(0,0,0,0.3);
+            z-index: 10;
+        }
+        
+        .compass-arrow {
+            width: 4px;
+            height: 30px;
+            background-color: #e74c3c;
+            position: absolute;
+            top: 10px;
+            transform-origin: bottom center;
+            transition: transform 0.1s ease;
+        }
+        
+        .compass-north {
+            position: absolute;
+            top: 5px;
+            font-weight: bold;
+            color: #e74c3c;
+        }
+        
+        .location-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px 15px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        
+        .marker {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background-color: #e74c3c;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        
+        .marker-info {
+            position: absolute;
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 12px;
+            white-space: nowrap;
+            transform: translate(10px, -50%);
+            box-shadow: 0 0 5px rgba(0,0,0,0.3);
+            pointer-events: none;
+            z-index: 5;
+        }
+        
+        .map-container {
+            flex: 1;
+            position: relative;
+        }
+        
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .accuracy-circle {
+            border-radius: 50%;
+            border: 2px solid rgba(0, 123, 255, 0.5);
+            background-color: rgba(0, 123, 255, 0.1);
+        }
+        
+        .controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(255, 255, 255, 0.8);
+            padding: 10px;
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.2);
+            z-index: 10;
+        }
+        
+        button {
+            background-color: #3498db;
+            color: white;
+            border: none;
+            padding: 8px 12px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-right: 5px;
+            font-size: 14px;
+        }
+        
+        button:hover {
+            background-color: #2980b9;
+        }
+        
+        .status {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #7f8c8d;
+        }
+        
+        .horizon {
+            position: absolute;
+            bottom: 0;
+            width: 100%;
+            height: 40%;
+            background: linear-gradient(to bottom, rgba(135, 206, 235, 0) 0%, rgba(34, 139, 34, 0.7) 100%);
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Mappa Interattiva con Visuale dal Suolo</h1>
+    </header>
+    
+    <div class="container">
+        <div class="ground-view" id="groundView">
+            <div class="compass">
+                <div class="compass-north">N</div>
+                <div class="compass-arrow" id="compassArrow"></div>
+            </div>
+            
+            <div class="location-info">
+                <div>Lat: <span id="currentLat">-</span></div>
+                <div>Lon: <span id="currentLon">-</span></div>
+                <div>Direzione: <span id="currentHeading">-</span>°</div>
+            </div>
+            
+            <div class="horizon"></div>
+        </div>
+        
+        <div class="map-container">
+            <div id="map"></div>
+            <div class="controls">
+                <button id="centerMap">Centra Mappa</button>
+                <div class="status" id="locationStatus">Posizione: in attesa...</div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/ol@8.1.0/dist/ol.js"></script>
+    <script>
+        // Variabili globali
+        let userLocation = null;
+        let userHeading = null;
+        let map = null;
+        let userMarker = null;
+        let accuracyCircle = null;
+        let townMarkers = [];
+        let groundViewMarkers = [];
+        let watchId = null;
+        let compassWatchId = null;
+
+        // Centri abitati di esempio (coordinate, nome)
+        const towns = [
+            { name: "Milano", lat: 45.4642, lon: 9.1900 },
+            { name: "Roma", lat: 41.9028, lon: 12.4964 },
+            { name: "Napoli", lat: 40.8518, lon: 14.2681 },
+            { name: "Torino", lat: 45.0703, lon: 7.6869 },
+            { name: "Palermo", lat: 38.1157, lon: 13.3615 },
+            { name: "Firenze", lat: 43.7696, lon: 11.2558 },
+            { name: "Bologna", lat: 44.4949, lon: 11.3426 },
+            { name: "Genova", lat: 44.4056, lon: 8.9463 },
+            { name: "Venezia", lat: 45.4408, lon: 12.3155 },
+            { name: "Verona", lat: 45.4384, lon: 10.9916 }
+        ];
+
+        // Inizializzazione della mappa
+        function initMap() {
+            map = new ol.Map({
+                target: 'map',
+                layers: [
+                    new ol.layer.Tile({
+                        source: new ol.source.OSM()
+                    })
+                ],
+                view: new ol.View({
+                    center: ol.proj.fromLonLat([12.4964, 41.9028]), // Centro su Roma
+                    zoom: 6
+                })
+            });
+            
+            // Aggiungi controllo per il fullscreen
+            map.addControl(new ol.control.FullScreen());
+            
+            // Centra la mappa sulla posizione corrente
+            document.getElementById('centerMap').addEventListener('click', centerMapOnUser);
+        }
+
+        // Centra la mappa sulla posizione dell'utente
+        function centerMapOnUser() {
+            if (userLocation) {
+                const view = map.getView();
+                view.setCenter(ol.proj.fromLonLat([userLocation.lon, userLocation.lat]));
+                view.setZoom(12);
+            }
+        }
+
+        // Aggiorna la posizione dell'utente sulla mappa
+        function updateUserLocationOnMap(lat, lon, accuracy) {
+            // Rimuovi il marker precedente se esiste
+            if (userMarker) {
+                map.removeLayer(userMarker);
+            }
+            if (accuracyCircle) {
+                map.removeLayer(accuracyCircle);
+            }
+            
+            // Crea un nuovo marker per la posizione dell'utente
+            userMarker = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [
+                        new ol.Feature({
+                            geometry: new ol.geom.Point(ol.proj.fromLonLat([lon, lat]))
+                        })
+                    ]
+                }),
+                style: new ol.style.Style({
+                    image: new ol.style.Circle({
+                        radius: 8,
+                        fill: new ol.style.Fill({ color: '#3498db' }),
+                        stroke: new ol.style.Stroke({
+                            color: '#ffffff',
+                            width: 2
+                        })
+                    })
+                })
+            });
+            
+            map.addLayer(userMarker);
+            
+            // Aggiungi cerchio di accuratezza
+            accuracyCircle = new ol.layer.Vector({
+                source: new ol.source.Vector({
+                    features: [
+                        new ol.Feature({
+                            geometry: new ol.geom.Circle(
+                                ol.proj.fromLonLat([lon, lat]),
+                                accuracy
+                            )
+                        })
+                    ]
+                }),
+                style: new ol.style.Style({
+                    stroke: new ol.style.Stroke({
+                        color: 'rgba(0, 123, 255, 0.5)',
+                        width: 2
+                    }),
+                    fill: new ol.style.Fill({
+                        color: 'rgba(0, 123, 255, 0.1)'
+                    })
+                })
+            });
+            
+            map.addLayer(accuracyCircle);
+        }
+
+        // Aggiungi marker per i centri abitati sulla mappa
+        function addTownMarkersToMap() {
+            // Rimuovi i marker precedenti
+            townMarkers.forEach(marker => {
+                map.removeLayer(marker);
+            });
+            townMarkers = [];
+            
+            // Aggiungi i marker per ogni città
+            towns.forEach(town => {
+                const marker = new ol.layer.Vector({
+                    source: new ol.source.Vector({
+                        features: [
+                            new ol.Feature({
+                                geometry: new ol.geom.Point(ol.proj.fromLonLat([town.lon, town.lat])),
+                                name: town.name
+                            })
+                        ]
+                    }),
+                    style: new ol.style.Style({
+                        image: new ol.style.Circle({
+                            radius: 6,
+                            fill: new ol.style.Fill({ color: '#e74c3c' }),
+                            stroke: new ol.style.Stroke({
+                                color: '#ffffff',
+                                width: 2
+                            })
+                        })
+                    })
+                });
+                
+                map.addLayer(marker);
+                townMarkers.push(marker);
+            });
+        }
+
+        // Aggiorna la visuale dal suolo
+        function updateGroundView() {
+            if (!userLocation || !userHeading) return;
+            
+            // Calcola la posizione dei marker nella visuale dal suolo
+            updateGroundViewMarkers();
+            
+            // Aggiorna la freccia della bussola
+            document.getElementById('compassArrow').style.transform = `rotate(${userHeading}deg)`;
+            
+            // Aggiorna le informazioni sulla posizione
+            document.getElementById('currentLat').textContent = userLocation.lat.toFixed(6);
+            document.getElementById('currentLon').textContent = userLocation.lon.toFixed(6);
+            document.getElementById('currentHeading').textContent = Math.round(userHeading);
+        }
+
+        // Calcola la posizione dei marker nella visuale dal suolo
+        function updateGroundViewMarkers() {
+            // Rimuovi i marker precedenti
+            groundViewMarkers.forEach(marker => {
+                if (marker.element && marker.element.parentNode) {
+                    marker.element.parentNode.removeChild(marker.element);
+                }
+                if (marker.infoElement && marker.infoElement.parentNode) {
+                    marker.infoElement.parentNode.removeChild(marker.infoElement);
+                }
+            });
+            groundViewMarkers = [];
+            
+            const groundView = document.getElementById('groundView');
+            const groundViewWidth = groundView.clientWidth;
+            const groundViewHeight = groundView.clientHeight;
+            
+            towns.forEach(town => {
+                // Calcola la distanza e l'heading verso la città
+                const distance = calculateDistance(
+                    userLocation.lat, userLocation.lon, 
+                    town.lat, town.lon
+                );
+                
+                const headingToTown = calculateBearing(
+                    userLocation.lat, userLocation.lon, 
+                    town.lat, town.lon
+                );
+                
+                // Calcola l'angolo relativo rispetto alla direzione dell'utente
+                let relativeAngle = headingToTown - userHeading;
+                if (relativeAngle < 0) relativeAngle += 360;
+                if (relativeAngle > 360) relativeAngle -= 360;
+                
+                // Se la città è dietro di noi, non mostrarla
+                if (relativeAngle > 90 && relativeAngle < 270) return;
+                
+                // Calcola la posizione X nel campo visivo (da -1 a 1)
+                let xPosition = 0;
+                if (relativeAngle <= 90) {
+                    xPosition = -Math.cos(relativeAngle * Math.PI / 180);
+                } else {
+                    xPosition = Math.cos((360 - relativeAngle) * Math.PI / 180);
+                }
+                
+                // Calcola la posizione Y (più lontano = più in alto)
+                const maxDistance = 500; // km
+                const yPosition = 0.7 - (distance / maxDistance) * 0.5;
+                
+                // Crea il marker
+                const marker = document.createElement('div');
+                marker.className = 'marker';
+                marker.style.left = `${50 + xPosition * 40}%`;
+                marker.style.top = `${yPosition * 100}%`;
+                
+                // Crea l'info box
+                const infoElement = document.createElement('div');
+                infoElement.className = 'marker-info';
+                infoElement.innerHTML = `
+                    <strong>${town.name}</strong><br>
+                    Distanza: ${distance.toFixed(1)} km<br>
+                    Direzione: ${Math.round(headingToTown)}°
+                `;
+                infoElement.style.left = `${50 + xPosition * 40}%`;
+                infoElement.style.top = `${yPosition * 100}%`;
+                
+                groundView.appendChild(marker);
+                groundView.appendChild(infoElement);
+                
+                groundViewMarkers.push({
+                    element: marker,
+                    infoElement: infoElement,
+                    town: town
+                });
+            });
+        }
+
+        // Calcola la distanza tra due punti (in km)
+        function calculateDistance(lat1, lon1, lat2, lon2) {
+            const R = 6371; // Raggio della Terra in km
+            const dLat = (lat2 - lat1) * Math.PI / 180;
+            const dLon = (lon2 - lon1) * Math.PI / 180;
+            const a = 
+                Math.sin(dLat/2) * Math.sin(dLat/2) +
+                Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
+                Math.sin(dLon/2) * Math.sin(dLon/2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+            return R * c;
+        }
+
+        // Calcola l'heading tra due punti (in gradi)
+        function calculateBearing(lat1, lon1, lat2, lon2) {
+            const φ1 = lat1 * Math.PI / 180;
+            const φ2 = lat2 * Math.PI / 180;
+            const Δλ = (lon2 - lon1) * Math.PI / 180;
+            
+            const y = Math.sin(Δλ) * Math.cos(φ2);
+            const x = Math.cos(φ1) * Math.sin(φ2) -
+                      Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
+            const θ = Math.atan2(y, x);
+            
+            return (θ * 180 / Math.PI + 360) % 360;
+        }
+
+        // Gestione della geolocalizzazione
+        function initGeolocation() {
+            if (!navigator.geolocation) {
+                document.getElementById('locationStatus').textContent = 
+                    'Geolocalizzazione non supportata dal browser';
+                return;
+            }
+            
+            // Avvia il monitoraggio della posizione
+            watchId = navigator.geolocation.watchPosition(
+                position => {
+                    const lat = position.coords.latitude;
+                    const lon = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    userLocation = { lat, lon };
+                    
+                    // Aggiorna la mappa
+                    updateUserLocationOnMap(lat, lon, accuracy);
+                    
+                    // Aggiorna la visuale dal suolo
+                    updateGroundView();
+                    
+                    document.getElementById('locationStatus').textContent = 
+                        `Posizione: ${lat.toFixed(6)}, ${lon.toFixed(6)} (accuratezza: ${Math.round(accuracy)}m)`;
+                },
+                error => {
+                    let errorMessage = 'Errore di geolocalizzazione: ';
+                    switch(error.code) {
+                        case error.PERMISSION_DENIED:
+                            errorMessage += 'Permesso negato';
+                            break;
+                        case error.POSITION_UNAVAILABLE:
+                            errorMessage += 'Posizione non disponibile';
+                            break;
+                        case error.TIMEOUT:
+                            errorMessage += 'Timeout';
+                            break;
+                        default:
+                            errorMessage += 'Errore sconosciuto';
+                    }
+                    document.getElementById('locationStatus').textContent = errorMessage;
+                },
+                {
+                    enableHighAccuracy: true,
+                    timeout: 10000,
+                    maximumAge: 60000
+                }
+            );
+        }
+
+        // Gestione della bussola
+        function initCompass() {
+            if (!window.DeviceOrientationEvent) {
+                document.getElementById('locationStatus').textContent += ' | Bussola non supportata';
+                return;
+            }
+            
+            // Richiedi l'autorizzazione per l'orientamento del dispositivo su iOS
+            if (typeof DeviceOrientationEvent.requestPermission === 'function') {
+                DeviceOrientationEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('deviceorientation', handleOrientation);
+                        } else {
+                            document.getElementById('locationStatus').textContent += 
+                                ' | Autorizzazione bussola negata';
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // Per browser che non richiedono autorizzazione
+                window.addEventListener('deviceorientation', handleOrientation);
+            }
+        }
+
+        // Gestisce i dati dell'orientamento del dispositivo
+        function handleOrientation(event) {
+            if (event.alpha !== null) {
+                // Calcola l'heading corretto in base all'orientamento del dispositivo
+                let heading = event.alpha; // alpha: orientamento rispetto al nord magnetico
+                
+                // Compensa per l'orientamento dello schermo
+                switch (window.orientation) {
+                    case 90:
+                        heading = (heading + 90) % 360;
+                        break;
+                    case -90:
+                        heading = (heading - 90) % 360;
+                        break;
+                    case 180:
+                        heading = (heading + 180) % 360;
+                        break;
+                }
+                
+                userHeading = heading;
+                updateGroundView();
+            }
+        }
+
+        // Inizializzazione dell'applicazione
+        function initApp() {
+            initMap();
+            addTownMarkersToMap();
+            initGeolocation();
+            initCompass();
+            
+            // Centra la mappa dopo un breve ritardo per permettere il caricamento
+            setTimeout(centerMapOnUser, 1000);
+        }
+
+        // Avvia l'applicazione quando la pagina è caricata
+        window.addEventListener('load', initApp);
+    </script>
+</body>
+</html>
