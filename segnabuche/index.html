@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <title>Mappa Mobile</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    html, body {
+      margin: 0; padding: 0; height: 100%; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      display: flex; flex-direction: column;
+    }
+
+    #map-container { flex: 1; width: 100%; position: relative; }
+    #map { height: 100%; width: 100%; }
+
+    #controls-container {
+      flex-shrink: 0; width: 100%; background: white; padding: 10px;
+      box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+      display: flex; flex-direction: column; gap: 8px; box-sizing: border-box;
+      z-index: 1000;
+    }
+
+    .button-row { display: flex; gap: 8px; }
+    button {
+      flex: 1; padding: 12px 5px; font-size: 14px; cursor: pointer;
+      border: none; border-radius: 8px; color: white; font-weight: bold;
+    }
+
+    #btnAddMarker { background-color: #28a745; }
+    #btnMarkClosed { background-color: #007bff; }
+    #btnDeleteMarker { background-color: #dc3545; }
+    #btnToggleGPS { background-color: #6c757d; }
+    button:disabled { background-color: #cccccc; opacity: 0.6; }
+
+    .info-display { font-weight: bold; color: #333; font-size: 13px; }
+    
+    #server-status { 
+        font-size: 12px; color: #555; white-space: nowrap; 
+        overflow: hidden; text-overflow: ellipsis; max-width: 100%;
+    }
+
+    #crosshair {
+      position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%);
+      z-index: 999; pointer-events: none;
+    }
+    #crosshair::before, #crosshair::after {
+      content: ''; position: absolute; background-color: rgba(0,0,0,0.6);
+      width: 20px; height: 2px;
+    }
+    #crosshair::after { transform: rotate(90deg); }
+
+    .location-marker-icon-gps {
+        background-color: #1a73e8; width: 14px; height: 14px; border-radius: 50%;
+        border: 2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.4);
+    }
+  </style>
+</head>
+<body>
+  <div id="map-container">
+    <div id="map"></div>
+    <div id="crosshair"></div>
+  </div>
+
+  <div id="controls-container">
+    <div class="button-row">
+        <button id="btnAddMarker">AGGIUNGI</button>
+        <button id="btnMarkClosed" disabled>CHIUDI</button>
+        <button id="btnDeleteMarker" disabled>CANCELLA</button>
+    </div>
+    <div class="button-row">
+        <button id="btnToggleGPS" style="width: 100%;">GPS DISATTIVO</button>
+    </div>
+
+    <div id="info-section">
+        <div id="loaded-markers-count" class="info-display">Marker: 0</div>
+        <div id="server-status" class="info-display">Status: Pronto</div>
+    </div>
+  </div>
+
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script>
+    let map, gpsEnabled = false, watchId = null, locationMarker = null;
+    const markersOnMap = [];
+    let selectedMarker = null;
+
+    // ICONE PNG
+    const icons = {
+        aperta: L.icon({ iconUrl: 'aperta.png', iconSize: [36, 36], iconAnchor: [18, 36] }),
+        chiusa: L.icon({ iconUrl: 'chiusa.png', iconSize: [36, 36], iconAnchor: [18, 18] }),
+        apertaSel: L.icon({ iconUrl: 'aperta-sel.png', iconSize: [40, 40], iconAnchor: [20, 40] }),
+        chiusaSel: L.icon({ iconUrl: 'chiusa-sel.png', iconSize: [40, 40], iconAnchor: [20, 20] })
+    };
+    
+    const locationIcon = L.divIcon({ className: 'location-marker-icon-gps', iconSize: [14, 14], iconAnchor: [7, 7] });
+
+    function initMap() {
+      map = L.map('map', { zoomControl: false }).setView([41.9, 12.5], 15);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
+      loadMarkersFromServer();
+      map.on('click', deselectMarker);
+    }
+
+    function updateServerStatus(msg, isError = false) {
+        const el = document.getElementById('server-status');
+        el.textContent = "Status: " + msg;
+        el.style.color = isError ? '#dc3545' : '#333';
+    }
+
+    async function apiCall(data) {
+        try {
+            const response = await fetch('manage_markers.php', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(data)
+            });
+            const result = await response.json();
+            if (!response.ok) {
+                updateServerStatus(result.message || "Errore Server", true);
+                return null;
+            }
+            return result;
+        } catch (error) {
+            updateServerStatus("Errore connessione", true);
+            return null;
+        }
+    }
+
+    async function loadMarkersFromServer() {
+        updateServerStatus("Caricamento...");
+        const data = await apiCall({ operation: 'load' });
+        if (!data || !Array.isArray(data)) return;
+
+        markersOnMap.forEach(m => map.removeLayer(m.leafletMarker));
+        markersOnMap.length = 0;
+
+        data.forEach(mD => {
+            markersOnMap.push(createMarkerObject(mD));
+        });
+        document.getElementById('loaded-markers-count').textContent = `Marker: ${markersOnMap.length}`;
+        updateServerStatus("Mappa pronta");
+    }
+
+    function createMarkerObject(markerData) {
+        const icon = markerData.status === 'chiusa' ? icons.chiusa : icons.aperta;
+        const leafletMarker = L.marker([markerData.latitude, markerData.longitude], {
+            icon: icon,
+            draggable: true
+        }).addTo(map);
+
+        const markerObject = { id: markerData.id, leafletMarker: leafletMarker, data: markerData };
+
+        leafletMarker.on('click', (e) => {
+            L.DomEvent.stopPropagation(e);
+            selectMarker(markerObject);
+        });
+
+        leafletMarker.on('dragend', async (e) => {
+            markerData.latitude = e.target.getLatLng().lat;
+            markerData.longitude = e.target.getLatLng().lng;
+            updateServerStatus("Spostamento...");
+            await apiCall({ operation: 'update', marker: markerData });
+            selectMarker(markerObject);
+        });
+
+        return markerObject;
+    }
+
+    function selectMarker(markerObject) {
+        deselectMarker();
+        selectedMarker = markerObject;
+        const isChiusa = selectedMarker.data.status === 'chiusa';
+        selectedMarker.leafletMarker.setIcon(isChiusa ? icons.chiusaSel : icons.apertaSel);
+        updateButtonStates();
+    }
+
+    function deselectMarker() {
+        if (selectedMarker) {
+            const isChiusa = selectedMarker.data.status === 'chiusa';
+            selectedMarker.leafletMarker.setIcon(isChiusa ? icons.chiusa : icons.aperta);
+            selectedMarker = null;
+        }
+        updateButtonStates();
+    }
+
+    async function addMarker() {
+        const center = map.getCenter();
+
+        // --- CONTROLLO DISTANZA 10 METRI ---
+        let tooClose = false;
+        markersOnMap.forEach(m => {
+            const dist = center.distanceTo(m.leafletMarker.getLatLng());
+            if (dist < 10) tooClose = true;
+        });
+
+        if (tooClose) {
+            alert("Attenzione: c'è già un marker entro 10 metri!");
+            updateServerStatus("Distanza minima 10m!", true);
+            return;
+        }
+
+        const newMarkerData = {
+            id: 'm-' + Date.now(),
+            latitude: center.lat,
+            longitude: center.lng,
+            status: 'aperta'
+        };
+
+        updateServerStatus("Salvataggio...");
+        const res = await apiCall({ operation: 'add', marker: newMarkerData });
+        if (res) {
+            const mObj = createMarkerObject(newMarkerData);
+            markersOnMap.push(mObj);
+            document.getElementById('loaded-markers-count').textContent = `Marker: ${markersOnMap.length}`;
+            selectMarker(mObj);
+            updateServerStatus("Aggiunto!");
+        }
+    }
+
+    async function deleteSelectedMarker() {
+        if (!selectedMarker) return;
+        if (!confirm("Cancellare il marker selezionato?")) return;
+        
+        updateServerStatus("Eliminazione...");
+        const res = await apiCall({ operation: 'delete', marker: { id: selectedMarker.id } });
+        if (res) {
+            map.removeLayer(selectedMarker.leafletMarker);
+            const idx = markersOnMap.findIndex(m => m.id === selectedMarker.id);
+            if (idx > -1) markersOnMap.splice(idx, 1);
+            selectedMarker = null;
+            updateButtonStates();
+            document.getElementById('loaded-markers-count').textContent = `Marker: ${markersOnMap.length}`;
+            updateServerStatus("Cancellato");
+        }
+    }
+
+    async function markSelectedMarkerClosed() {
+        if (!selectedMarker) return;
+        selectedMarker.data.status = 'chiusa';
+        updateServerStatus("Chiusura...");
+        const res = await apiCall({ operation: 'update', marker: selectedMarker.data });
+        if (res) {
+            deselectMarker();
+            updateServerStatus("Chiuso!");
+        }
+    }
+
+    function updateButtonStates() {
+        const hasSel = (selectedMarker !== null);
+        document.getElementById('btnDeleteMarker').disabled = !hasSel;
+        document.getElementById('btnMarkClosed').disabled = !hasSel || selectedMarker.data.status === 'chiusa';
+    }
+
+    function toggleGPS() {
+        gpsEnabled = !gpsEnabled;
+        const btn = document.getElementById('btnToggleGPS');
+        if (gpsEnabled) {
+            btn.textContent = "GPS ATTIVO";
+            btn.style.backgroundColor = "#28a745";
+            watchId = navigator.geolocation.watchPosition(pos => {
+                const { latitude, longitude } = pos.coords;
+                map.setView([latitude, longitude], 17);
+                if (!locationMarker) {
+                    locationMarker = L.marker([latitude, longitude], {icon: locationIcon}).addTo(map);
+                } else {
+                    locationMarker.setLatLng([latitude, longitude]);
+                }
+            }, null, { enableHighAccuracy: true });
+        } else {
+            btn.textContent = "GPS DISATTIVO";
+            btn.style.backgroundColor = "#6c757d";
+            navigator.geolocation.clearWatch(watchId);
+            if (locationMarker) map.removeLayer(locationMarker);
+            locationMarker = null;
+        }
+    }
+
+    document.getElementById('btnAddMarker').addEventListener('click', addMarker);
+    document.getElementById('btnMarkClosed').addEventListener('click', markSelectedMarkerClosed);
+    document.getElementById('btnDeleteMarker').addEventListener('click', deleteSelectedMarker);
+    document.getElementById('btnToggleGPS').addEventListener('click', toggleGPS);
+    window.addEventListener('load', initMap);
+  </script>
+</body>
+</html>
